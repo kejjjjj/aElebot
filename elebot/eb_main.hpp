@@ -5,8 +5,6 @@
 
 #include "cg/cg_angles.hpp"
 
-//a bad method
-#define WORSE_IMPLEMENTATION 0
 
 constexpr std::int32_t ELEBOT_FPS = 333;
 
@@ -33,11 +31,13 @@ public:
 protected:
 	[[nodiscard]] virtual constexpr float GetRemainingDistance() const noexcept;
 	[[nodiscard]] virtual constexpr float GetRemainingDistance(const float p) const noexcept;
+	[[nodiscard]] constexpr float GetDistanceTravelled(const float p, bool isUnSignedDirection) const noexcept;
+	[[nodiscard]] inline constexpr bool IsUnsignedDirection() const noexcept { return m_iDirection == N || m_iDirection == W; }
 
 	[[nodiscard]] virtual constexpr bool IsPointTooFar(const float p) const noexcept;
-	[[nodiscard]] constexpr float GetDistanceTravelled(const float p, bool isSignedDirection) const noexcept;
+	[[nodiscard]] virtual constexpr bool IsPointInWrongDirection(const float p) const noexcept;
 
-	[[nodiscard]] inline constexpr bool IsUnsignedDirection() const noexcept { return m_iDirection == N || m_iDirection == W; }
+	[[nodiscard]] virtual constexpr bool IsMovingBackwards() const noexcept;
 
 	void EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd);
 
@@ -48,10 +48,14 @@ protected:
 	float m_fTargetPosition = {};
 	float m_fTotalDistance = {};
 	float m_fDistanceTravelled = {};
-	float m_fTargetYaw = {};
 
+	float m_fOldOrigin = {};
+
+	float m_fTargetYaw = {};
 	float m_fTargetYawDelta = 45.f;
 
+	std::int8_t m_cRightmove = -127;
+	std::int8_t m_cForwardMove = 127;
 private:
 
 	std::vector<playback_cmd> m_oVecCmds;
@@ -74,14 +78,16 @@ private:
 	[[nodiscard]] bool CanWalk(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
 	void Walk(const playerState_s* ps, usercmd_s* cmd);
 
-	[[nodiscard]] bool CanStepForward(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
-	void StepForward(const playerState_s* ps, usercmd_s* cmd);
+	[[nodiscard]] bool CanStepLongitudinally(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
+	void StepLongitudinally(const playerState_s* ps, usercmd_s* cmd);
+
+	constexpr float GetTargetYawForSidewaysMovement() const noexcept;
 
 	[[nodiscard]] bool CanStepSideways(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
 	void StepSideways(const playerState_s* ps, usercmd_s* cmd);
 
 	bool m_bWalkingIsTooDangerous = false;
-	bool m_bSteppingForwardIsTooDangerous = false;
+	bool m_bSteppingLongitudinallyIsTooDangerous = false;
 };
 
 class CElebot

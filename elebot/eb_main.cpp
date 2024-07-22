@@ -145,7 +145,17 @@ constexpr bool CElebotBase::IsPointTooFar(const float p) const noexcept
 	//if the result is negative, then we have gone too far
 	return GetDistanceTravelled(p, IsUnsignedDirection()) < 0.f;
 }
+constexpr bool CElebotBase::IsPointInWrongDirection(const float p) const noexcept
+{
+	const auto distTravelled = m_fTotalDistance - (IsUnsignedDirection() ? (m_fTargetPosition - p) : (p - m_fTargetPosition));
 
+	//if the result is negative, then it's behind us
+	return distTravelled < 0.f;
+}
+constexpr bool CElebotBase::IsMovingBackwards() const noexcept
+{
+	return m_cForwardMove < 0;
+}
 void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd)
 {
 	playback_cmd pcmd;
@@ -191,6 +201,7 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 		return false;
 	}
 
+	base->m_fOldOrigin = ps->origin[base->m_iAxis];
 	base->PushPlayback();
 	return true;
 
