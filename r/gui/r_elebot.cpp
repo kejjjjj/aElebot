@@ -30,14 +30,12 @@ void CElebotWindow::Render()
 	if (!table)
 		return;
 
-	for (const auto& v : *table) {
+	for (const auto& nvar : table->GetSorted()) {
 
-		const auto& [key, value] = v;
-
-		if (value && value->IsImNVar()) {
-			std::string _v_ = key + "_menu";
+		if (nvar && nvar->IsImNVar()) {
+			std::string _v_ = nvar->GetName() + "_menu";
 			ImGui::BeginChild(_v_.c_str(), ImVec2(0, 0), ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border);
-			value->RenderImNVar();
+			nvar->RenderImNVar();
 			ImGui::EndChild();
 		}
 
