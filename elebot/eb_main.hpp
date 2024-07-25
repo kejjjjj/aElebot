@@ -8,7 +8,10 @@
 
 constexpr std::int32_t ELEBOT_FPS = 333;
 
+
 class CGroundElebot;
+class CAirElebot;
+
 struct playback_cmd;
 
 using ElebotUpdate_f = bool(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd);
@@ -16,6 +19,9 @@ using ElebotUpdate_f = bool(const playerState_s* ps, usercmd_s* cmd, usercmd_s* 
 class CElebotBase
 {
 	friend class CElebot;
+	friend class CAirElebotVariation;
+	friend class CElebotGroundTarget;
+	friend class CElebotWorldTarget;
 
 public:
 	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition);
@@ -39,6 +45,12 @@ protected:
 
 	[[nodiscard]] virtual constexpr bool IsMovingBackwards() const noexcept;
 
+	[[nodiscard]] virtual constexpr float GetTargetYawForSidewaysMovement() const noexcept;
+
+	virtual void ApplyMovementDirectionCorrections(const playerState_s* ps) noexcept;
+
+	[[nodiscard]] bool IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
+
 	void EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd);
 
 	axis_t m_iAxis = {};
@@ -56,39 +68,16 @@ protected:
 
 	std::int8_t m_cRightmove = -127;
 	std::int8_t m_cForwardMove = 127;
+
+	std::int8_t m_cForwardDirection = 127;
+
 private:
+
 
 	std::vector<playback_cmd> m_oVecCmds;
 
 };
 
-class CGroundElebot : public CElebotBase
-{
-public:
-	CGroundElebot(const playerState_s* ps, axis_t axis, float targetPosition);
-	~CGroundElebot();
-
-	[[nodiscard]] ElebotUpdate_f Update override;
-
-private:
-	[[nodiscard]] bool CanSprint(const playerState_s* ps) const noexcept;
-	void Sprint(const playerState_s* ps, const usercmd_s* cmd);
-	void StopSprinting(usercmd_s* cmd) const noexcept;
-
-	[[nodiscard]] bool CanWalk(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
-	void Walk(const playerState_s* ps, usercmd_s* cmd);
-
-	[[nodiscard]] bool CanStepLongitudinally(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
-	void StepLongitudinally(const playerState_s* ps, usercmd_s* cmd);
-
-	constexpr float GetTargetYawForSidewaysMovement() const noexcept;
-
-	[[nodiscard]] bool CanStepSideways(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept;
-	void StepSideways(const playerState_s* ps, usercmd_s* cmd);
-
-	bool m_bWalkingIsTooDangerous = false;
-	bool m_bSteppingLongitudinallyIsTooDangerous = false;
-};
 
 class CElebot
 {
@@ -97,12 +86,13 @@ class CElebot
 public:
 
 	CElebot(const playerState_s* ps, axis_t axis, float targetPosition);
-
+	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
 
 private:
 
 	std::unique_ptr<CGroundElebot> m_pGroundMove;
+	std::unique_ptr<CAirElebot> m_pAirMove;
 
 };
 

@@ -1,3 +1,4 @@
+#include "bg/bg_pmove.hpp"
 #include "bg/bg_pmove_simulation.hpp"
 
 #include "cg/cg_client.hpp"
@@ -6,10 +7,12 @@
 #include "cg/cg_trace.hpp"
 
 #include "cl/cl_utils.hpp"
+#include "cl/cl_input.hpp"
 
 #include "com/com_channel.hpp"
 
 #include "eb_ground.hpp"
+#include "airmove/eb_airmove.hpp"
 #include "eb_main.hpp"
 
 #include "utils/typedefs.hpp"
@@ -24,9 +27,12 @@
 #else
 #include "shared/sv_shared.hpp"
 #endif
+#include <cassert>
 
 [[nodiscard]] static constexpr cardinal_dir GetCardinalDirection(float origin, axis_t axis, float targetPosition)
 {
+	assert(axis == X || axis == Y);
+
 	switch (axis) {
 	case X:
 		return origin < targetPosition ? N : S;
@@ -112,6 +118,7 @@ void CElebotBase::PushPlayback(const std::vector<playback_cmd>& cmds) const
 void CElebotBase::OnFrameStart(const playerState_s* ps) noexcept
 {
 	m_fDistanceTravelled = GetDistanceTravelled(ps->origin[m_iAxis], IsUnsignedDirection());
+	ApplyMovementDirectionCorrections(ps);
 
 }
 [[nodiscard]] bool CElebotBase::HasFinished(const playerState_s* ps) const noexcept
@@ -120,6 +127,9 @@ void CElebotBase::OnFrameStart(const playerState_s* ps) noexcept
 }
 constexpr float CElebotBase::GetRemainingDistance() const noexcept
 {
+	if (m_fDistanceTravelled < 0.f)
+		return m_fDistanceTravelled;
+
 	return m_fTotalDistance - m_fDistanceTravelled;
 }
 constexpr float CElebotBase::GetRemainingDistance(const float p) const noexcept
@@ -156,6 +166,47 @@ constexpr bool CElebotBase::IsMovingBackwards() const noexcept
 {
 	return m_cForwardMove < 0;
 }
+constexpr float CElebotBase::GetTargetYawForSidewaysMovement() const noexcept
+{
+	return !IsMovingBackwards() ?
+		((m_cRightmove < 0) ? m_fTargetYaw - m_fTargetYawDelta : m_fTargetYaw + m_fTargetYawDelta) :
+		(m_cRightmove > 0) ? m_fTargetYaw - m_fTargetYawDelta : m_fTargetYaw + m_fTargetYawDelta;
+
+}
+void CElebotBase::ApplyMovementDirectionCorrections(const playerState_s* ps) noexcept
+{
+	const bool hasOverStepped = IsPointTooFar(ps->origin[m_iAxis]);
+
+	if (hasOverStepped)
+		m_cForwardMove = -m_cForwardDirection;
+	else
+		m_cForwardMove = m_cForwardDirection;
+}
+bool CElebotBase::IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
+{
+
+	if (ps->velocity[m_iAxis] != 0.f)
+		return false;
+
+	//playerstate won't get modified
+	auto pm = PM_Create(const_cast<playerState_s*>(ps), cmd, oldcmd);
+
+	fvec3 end = pm.ps->origin;
+
+	end[m_iAxis] += IsUnsignedDirection() ? 0.125f : -0.125f;
+
+	//stepsize - apparently unneeded
+	//pm.maxs[Z] = (pm.ps->pm_flags & PMF_PRONE) != 0 ? 10.f : 18.f;
+
+	trace_t trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
+	
+	//didn't hit anything
+	if ((fvec3&)trace.normal == 0.f)
+		return false;
+
+	return std::abs(trace.normal[m_iAxis]) == 1.f && std::abs(trace.normal[Z]) == 0.f;
+
+}
 void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd)
 {
 	playback_cmd pcmd;
@@ -178,7 +229,13 @@ void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_
 CElebot::CElebot(const playerState_s* ps, axis_t axis, float targetPosition)
 {
 	m_pGroundMove = std::make_unique<CGroundElebot>(ps, axis, targetPosition);
+	m_pAirMove = std::make_unique<CAirElebot>(ps, axis, targetPosition);
+
+	//todo: remove when world target is implemented!
+	m_pAirMove->SetGroundTarget();
+
 }
+CElebot::~CElebot() = default;
 
 
 bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
@@ -186,8 +243,11 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 	if (WASD_PRESSED())
 		return false;
 
+	assert(ps != nullptr);
+	assert(cmd != nullptr);
+	assert(oldcmd != nullptr);
 
-	CElebotBase* base = CG_IsOnGround(ps) ? m_pGroundMove.get() : nullptr; //airmove yet to be implemented
+	CElebotBase* base = CG_IsOnGround(ps) ? reinterpret_cast<CElebotBase*>(m_pGroundMove.get()) : reinterpret_cast<CElebotBase*>(m_pAirMove.get());
 
 	if (!base)
 		return false;

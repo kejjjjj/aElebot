@@ -1,8 +1,10 @@
+#include "bg/bg_pmove.hpp"
 #include "bg/bg_pmove_simulation.hpp"
 
 #include "cg/cg_local.hpp"
 #include "cg/cg_offsets.hpp"
 #include "cg/cg_client.hpp"
+#include "cg/cg_trace.hpp"
 
 #include "eb_ground.hpp"
 #include "eb_main.hpp"
@@ -32,6 +34,9 @@ CGroundElebot::CGroundElebot(const playerState_s* ps, axis_t axis, float targetP
 		m_fTargetYaw = AngleNormalize180(m_fTargetYaw + 180);
 	}
 
+	m_cForwardDirection = m_cForwardMove;
+
+	m_fTargetYawDelta = 90.f;
 
 }
 
@@ -41,6 +46,7 @@ bool CGroundElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unus
 {
 	if (HasFinished(ps))
 		return false;
+
 
 	if (CanSprint(ps)) {
 		Sprint(ps, cmd);
@@ -53,6 +59,13 @@ bool CGroundElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unus
 	}
 
 	if (CanWalk(ps, cmd, oldcmd)) {
+
+		//stuck on a step, so try to jump on it
+		if (IsVelocityBeingClipped(ps, cmd, oldcmd)) {
+			Jump(cmd);
+			return true;
+		}
+
 		Walk(ps, cmd);
 		return true;
 	}
@@ -68,8 +81,14 @@ bool CGroundElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unus
 		return true;
 	}
 
+
 	if (CanStepSideways(ps, cmd, oldcmd)) {
 		StepSideways(ps, cmd);
+		return true;
+	}
+
+	if (ReadyToJump(ps) && IsElevatorOnAStep(ps, cmd, oldcmd)) {
+		Jump(cmd);
 		return true;
 	}
 
@@ -168,15 +187,6 @@ void CGroundElebot::StepLongitudinally(const playerState_s* ps, usercmd_s* cmd)
 	ccmd.buttons |= (IsMovingBackwards() ? cmdEnums::crouch : 0);
 	EmplacePlaybackCommand(ps, &ccmd);
 }
-
-
-constexpr float CGroundElebot::GetTargetYawForSidewaysMovement() const noexcept
-{
-	return !IsMovingBackwards() ?
-		((m_cRightmove < 0) ? m_fTargetYaw - m_fTargetYawDelta : m_fTargetYaw + m_fTargetYawDelta) :
-		(m_cRightmove > 0) ? m_fTargetYaw - m_fTargetYawDelta : m_fTargetYaw + m_fTargetYawDelta;
-
-}
 bool CGroundElebot::CanStepSideways(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept
 {
 	//only step when the player doesn't have any velocity
@@ -188,9 +198,13 @@ bool CGroundElebot::CanStepSideways(const playerState_s* ps, const usercmd_s* cm
 	playerState_s local_ps = *ps;
 
 	//start at 90 degrees, keep halving if overstepping
-	m_fTargetYawDelta = 90.f;
+	//m_fTargetYawDelta = 90.f;
 
-	while (!WASD_PRESSED()) {
+	constexpr auto MAX_ITERATIONS = ELEBOT_FPS;
+	for ([[maybe_unused]] const auto i : std::views::iota(0, MAX_ITERATIONS)) {
+
+		if (WASD_PRESSED())
+			break;
 
 		const auto yaw = GetTargetYawForSidewaysMovement();
 
@@ -221,6 +235,12 @@ bool CGroundElebot::CanStepSideways(const playerState_s* ps, const usercmd_s* cm
 		const auto predictedPosition = cmds.value().back().origin[m_iAxis];
 		const bool tooFar = IsPointTooFar(predictedPosition);
 
+		if (predictedPosition == ps->origin[m_iAxis]) {
+			//delta too low, try again
+			m_fTargetYawDelta = 90.f;
+			return false;
+		}
+
 		if (!tooFar)
 			break;
 
@@ -246,4 +266,30 @@ void CGroundElebot::StepSideways(const playerState_s* ps, usercmd_s* cmd)
 	ccmd.angles[YAW] = ANGLE2SHORT(AngleDelta(yaw, ps->delta_angles[YAW]));
 	EmplacePlaybackCommand(ps, &ccmd);
 }
+constexpr bool CGroundElebot::ReadyToJump(const playerState_s* ps) const noexcept
+{
+	return m_bSteppingLongitudinallyIsTooDangerous && !IsPointTooFar(ps->origin[m_iAxis]) && ps->velocity[m_iAxis] == 0.f;
+}
+bool CGroundElebot::IsElevatorOnAStep(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const noexcept
+{
+	//playerstate won't get modified
+	auto pm = PM_Create(const_cast<playerState_s*>(ps), cmd, oldcmd);
 
+	fvec3 end = pm.ps->origin;
+	const auto distance = GetRemainingDistance();
+
+	end[m_iAxis] += IsUnsignedDirection() ? distance : -distance;
+
+	trace_t trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
+
+	//didn't hit anything
+	if ((fvec3&)trace.normal == 0.f)
+		return false;
+
+	return std::abs(trace.normal[m_iAxis]) == 1.f && std::abs(trace.normal[2]) == 0.f;
+}
+void CGroundElebot::Jump(usercmd_s* cmd) noexcept
+{
+	cmd->buttons &= ~(cmdEnums::crouch | cmdEnums::crouch_hold);
+	cmd->buttons |= cmdEnums::jump;
+}
