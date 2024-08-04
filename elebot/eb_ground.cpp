@@ -6,18 +6,14 @@
 #include "cg/cg_client.hpp"
 #include "cg/cg_trace.hpp"
 
+#include "com/com_channel.hpp"
+
 #include "eb_ground.hpp"
 #include "eb_main.hpp"
 
 #include "utils/functions.hpp"
 
-//the debug module cannot access the movement recorder really so....
-#if(DEBUG_SUPPORT)
-#include "_Modules/aMovementRecorder/movement_recorder/mr_main.hpp"
-#include "_Modules/aMovementRecorder/movement_recorder/mr_playback.hpp"
-#endif
-#include <com/com_channel.hpp>
-#include <iostream>
+#include <ranges>
 
 using FailCondition = CPmoveSimulation::StopPositionInput_t::FailCondition_e;
 
@@ -201,7 +197,7 @@ bool CGroundElebot::CanStepSideways(const playerState_s* ps, const usercmd_s* cm
 	//m_fTargetYawDelta = 90.f;
 
 	constexpr auto MAX_ITERATIONS = ELEBOT_FPS;
-	for ([[maybe_unused]] const auto i : std::views::iota(0, MAX_ITERATIONS)) {
+	for ([[maybe_unused]] const auto i : std::views::iota(0u, MAX_ITERATIONS)) {
 
 		if (WASD_PRESSED())
 			break;

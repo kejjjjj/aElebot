@@ -4,6 +4,8 @@
 #include "cl/cl_move.hpp"
 #include "utils/hook.hpp"
 
+#include "elebot/eb_debug.hpp"
+
 #include "bg/bg_pmove.hpp"
 #include "cg/cg_cleanup.hpp"
 #include "cg/cg_local.hpp"

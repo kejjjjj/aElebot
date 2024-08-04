@@ -1,11 +1,11 @@
+#include "bg/bg_pmove_simulation.hpp"
+#include "cg/cg_local.hpp"
+#include "cg/cg_offsets.hpp"
+#include "cl/cl_utils.hpp"
 #include "cl_move.hpp"
+#include "com/com_channel.hpp"
 #include "utils/hook.hpp"
-
-#include <cg/cg_local.hpp>
-#include <cg/cg_offsets.hpp>
-
-#include <cl/cl_utils.hpp>
-#include <utils/typedefs.hpp>
+#include "utils/typedefs.hpp"
 
 #include "elebot/eb_main.hpp"
 
@@ -24,13 +24,20 @@ void CL_FinishMove(usercmd_s* cmd)
 	auto oldcmd = CL_GetUserCmd(clients->cmdNumber - 1);
 
 	if (ps->pm_type == PM_NORMAL && CStaticElebot::Instance) {
-		if (!CStaticElebot::Instance->Update(ps, cmd, oldcmd))
+		try {
+			if (!CStaticElebot::Instance->Update(ps, cmd, oldcmd))
+				CStaticElebot::Instance.reset();
+
+		}
+		catch (...) {
+			Com_Printf("^1internal error lol\n");
 			CStaticElebot::Instance.reset();
 
-#if(DEBUG_SUPPORT)
-		CStaticMovementRecorder::Instance->Update(ps, cmd, oldcmd);
-#endif
+		}
 	}
+#if(DEBUG_SUPPORT)
+	CStaticMovementRecorder::Instance->Update(ps, cmd, oldcmd);
+#endif
 
 	return;
 }

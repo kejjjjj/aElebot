@@ -28,6 +28,7 @@
 #include "shared/sv_shared.hpp"
 #endif
 #include <cassert>
+#include <iostream>
 
 [[nodiscard]] static constexpr cardinal_dir GetCardinalDirection(float origin, axis_t axis, float targetPosition)
 {
@@ -63,8 +64,6 @@ void CElebotBase::PushPlayback()
 {
 	if (m_oVecCmds.empty())
 		return;
-
-
 
 #if(DEBUG_SUPPORT)
 	CStaticMovementRecorder::PushPlayback(m_oVecCmds, 
@@ -166,6 +165,12 @@ constexpr bool CElebotBase::IsMovingBackwards() const noexcept
 {
 	return m_cForwardMove < 0;
 }
+[[nodiscard]] constexpr bool CElebotBase::IsCorrectVelocityDirection(float velocity) const noexcept
+{
+	const auto isUnsigned = IsUnsignedDirection();
+	return isUnsigned && velocity > 0 || !isUnsigned && velocity < 0;
+
+}
 constexpr float CElebotBase::GetTargetYawForSidewaysMovement() const noexcept
 {
 	return !IsMovingBackwards() ?
@@ -195,19 +200,20 @@ bool CElebotBase::IsVelocityBeingClipped(const playerState_s* ps, const usercmd_
 
 	end[m_iAxis] += IsUnsignedDirection() ? 0.125f : -0.125f;
 
-	//stepsize - apparently unneeded
-	//pm.maxs[Z] = (pm.ps->pm_flags & PMF_PRONE) != 0 ? 10.f : 18.f;
+	//velocity does NOT get clipped when the step is this low
+	pm.mins[Z] = (pm.ps->pm_flags & PMF_PRONE) != 0 ? 10.f : 18.f;
+
 
 	trace_t trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
 	
 	//didn't hit anything
-	if ((fvec3&)trace.normal == 0.f)
+	if ((fvec3&)trace.normal == fvec3(0,0,0) && !trace.material)
 		return false;
 
 	return std::abs(trace.normal[m_iAxis]) == 1.f && std::abs(trace.normal[Z]) == 0.f;
 
 }
-void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd)
+playback_cmd CElebotBase::StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps) const
 {
 	playback_cmd pcmd;
 	pcmd.buttons = cmd->buttons;
@@ -219,12 +225,15 @@ void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_
 	pcmd.weapon = cmd->weapon;
 
 	pcmd.oldTime = cmd->serverTime;
-	pcmd.serverTime = pcmd.oldTime + (1000 / ELEBOT_FPS);
+	pcmd.serverTime = pcmd.oldTime + (1000 / fps);
 
 	pcmd.cmd_angles = cmd->angles;
 	pcmd.delta_angles = ps->delta_angles;
-
-	m_oVecCmds.emplace_back(pcmd);
+	return pcmd;
+}
+void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd)
+{
+	m_oVecCmds.emplace_back(StateToPlayback(ps, cmd));
 }
 CElebot::CElebot(const playerState_s* ps, axis_t axis, float targetPosition)
 {
@@ -247,13 +256,18 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 	assert(cmd != nullptr);
 	assert(oldcmd != nullptr);
 
+
 	CElebotBase* base = CG_IsOnGround(ps) ? reinterpret_cast<CElebotBase*>(m_pGroundMove.get()) : reinterpret_cast<CElebotBase*>(m_pAirMove.get());
+
 
 	if (!base)
 		return false;
 
 	base->OnFrameStart(ps);
 	if (!base->Update(ps, cmd, oldcmd)) {
+
+		//in case there is a pending finisher playback
+ 		base->PushPlayback();
 
 		if (base->HasFinished(ps))
 			cmd->angles[YAW] = ANGLE2SHORT(AngleDelta(base->m_fTargetYaw, ps->delta_angles[YAW]));
@@ -262,7 +276,11 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 	}
 
 	base->m_fOldOrigin = ps->origin[base->m_iAxis];
-	base->PushPlayback();
+
+	//don't want our player to start moving when we're testing something else
+	if(ps == &cgs->predictedPlayerState)
+		base->PushPlayback();
+
 	return true;
 
 }
@@ -293,4 +311,9 @@ void CStaticElebot::EB_MoveToCursor()
 	//std::greater either improves readibility or it doesn't
 	const axis_t axis = std::greater<float>()(std::fabs(trace.normal[X]), std::fabs(trace.normal[Y])) ? X : Y;
 	Instance = std::make_unique<CElebot>(&cgs->predictedPlayerState, axis, hitpos[axis]);
+
+	//auto aaa = (start + (end - start) * trace.fraction);
+	//aaa[axis] += (HITBOX_SIZE - TRACE_SIZE);
+
+	//Instance->blah_blah_hitpos = aaa;
 }

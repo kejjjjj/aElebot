@@ -11,7 +11,9 @@ struct cbrush_t;
 enum eElebotVariation
 {
 	world,
-	ground
+	ground,
+	qlearn,
+	block
 };
 
 class CAirElebotVariation
@@ -39,7 +41,6 @@ public:
 	[[nodiscard]] ElebotUpdate_f Update override;
 
 private:
-	[[nodiscard]] float GetSteepestYawDeltaForSteps(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
 	[[nodiscard]] constexpr inline bool IsTargetingGround() const { return m_pElebotVariation && m_pElebotVariation->type() == ground; };
 	[[nodiscard]] constexpr inline bool IsTargetingWorld() const { return m_pElebotVariation && m_pElebotVariation->type() == world; };
 

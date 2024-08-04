@@ -6,7 +6,7 @@
 #include "cg/cg_angles.hpp"
 
 
-constexpr std::int32_t ELEBOT_FPS = 333;
+constexpr auto ELEBOT_FPS = 333u;
 
 
 class CGroundElebot;
@@ -22,6 +22,8 @@ class CElebotBase
 	friend class CAirElebotVariation;
 	friend class CElebotGroundTarget;
 	friend class CElebotWorldTarget;
+	friend class CQLearnElebot;
+	friend class CBlockElebot;
 
 public:
 	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition);
@@ -44,6 +46,7 @@ protected:
 	[[nodiscard]] virtual constexpr bool IsPointInWrongDirection(const float p) const noexcept;
 
 	[[nodiscard]] virtual constexpr bool IsMovingBackwards() const noexcept;
+	[[nodiscard]] virtual constexpr bool IsCorrectVelocityDirection(float velocity) const noexcept;
 
 	[[nodiscard]] virtual constexpr float GetTargetYawForSidewaysMovement() const noexcept;
 
@@ -51,6 +54,7 @@ protected:
 
 	[[nodiscard]] bool IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
 
+	playback_cmd StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps = ELEBOT_FPS) const;
 	void EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd);
 
 	axis_t m_iAxis = {};
@@ -88,7 +92,6 @@ public:
 	CElebot(const playerState_s* ps, axis_t axis, float targetPosition);
 	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
-
 private:
 
 	std::unique_ptr<CGroundElebot> m_pGroundMove;
