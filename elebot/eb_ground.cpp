@@ -40,9 +40,11 @@ CGroundElebot::~CGroundElebot() = default;
 
 bool CGroundElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)
 {
-	if (HasFinished(ps))
+	if (WASD_PRESSED())
 		return false;
 
+	if (HasFinished(ps))
+		return false;
 
 	if (CanSprint(ps)) {
 		Sprint(ps, cmd);

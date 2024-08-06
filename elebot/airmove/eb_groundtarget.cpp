@@ -35,14 +35,17 @@ bool CElebotGroundTarget::Update([[maybe_unused]] const playerState_s* ps, [[may
 	//^^^^^ will do after I find a use case for it ^^^^^
 
 	//if stuck against a wall while falling
-	if (m_pBlockerAvoidState || ps->velocity[Z] < 0 && base.IsVelocityBeingClipped(ps, cmd, oldcmd)) {
+	const auto beingClipped = base.IsVelocityBeingClipped(ps, cmd, oldcmd);
+	if (m_pBlockerAvoidState || ps->velocity[Z] < 0 && beingClipped) {
 		return UpdateBlocker(ps, cmd, oldcmd);
 	}
 
+	//the code below doesn't work when being clipped..
+	if (beingClipped)
+		return true;
 
 	//it might give more airtime when crouched (hitting head)
 	cmd->buttons |= cmdEnums::crouch;
-
 
 	//tries to CAREFULLY step midair
 	//which means this is not super quick!
@@ -128,7 +131,7 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 		m_oCmds.emplace_back(base.StateToPlayback(pm->ps, &pm->cmd));
 
 		//wow would you look at that we can move under the target
-		if (pm->ps->velocity[Z] < 0 && !base.IsVelocityBeingClipped(pm->ps, &pm->cmd, &pm->oldcmd)) {
+		if (ps->velocity[Z] <= 0 && !base.IsVelocityBeingClipped(pm->ps, &pm->cmd, &pm->oldcmd)) {
 			//sim.Simulate();
 			m_pBlockerAvoidPlayerState = std::make_unique<playerState_s>(ps_local);
 			pm->ps = m_pBlockerAvoidPlayerState.get();

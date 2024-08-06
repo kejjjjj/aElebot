@@ -30,6 +30,7 @@ return 0;
 
 static void NVar_Setup([[maybe_unused]]NVarTable* table)
 {
+    table->AddImNvar<bool, ImCheckbox>("Elevate everything", false, NVar_ArithmeticToString<bool>);
 }
 
 #if(DEBUG_SUPPORT)
@@ -102,6 +103,8 @@ void CG_Init()
 
     table->WriteNVarsToFile();
 
+    ImGui::SetCurrentContext(CMain::Shared::GetFunctionOrExit("GetContext")->As<ImGuiContext*>()->Call());
+
     CMain::Shared::GetFunctionOrExit("AddItem")->As<CGuiElement*, std::unique_ptr<CGuiElement>&&>()
         ->Call(std::make_unique<CElebotWindow>(NVAR_TABLE_NAME));
 
@@ -163,9 +166,6 @@ dll_export void L(void* data) {
     catch ([[maybe_unused]] std::out_of_range& ex) {
         return FatalError(std::format("couldn't get a critical function"));
     }
-    using shared = CMain::Shared;
-
-    ImGui::SetCurrentContext(shared::GetFunctionOrExit("GetContext")->As<ImGuiContext*>()->Call());
 }
 
 #endif

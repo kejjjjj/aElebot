@@ -16,6 +16,13 @@ struct playback_cmd;
 
 using ElebotUpdate_f = bool(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd);
 
+enum elebot_flags
+{
+	groundmove = 1 << 1,
+	airmove = 1 << 2,
+	all_flags = 0xFFFFFFFF
+};
+
 class CElebotBase
 {
 	friend class CElebot;
@@ -24,6 +31,8 @@ class CElebotBase
 	friend class CElebotWorldTarget;
 	friend class CQLearnElebot;
 	friend class CBlockElebot;
+
+	friend void CL_FinishMove(usercmd_s* cmd);
 
 public:
 	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition);
@@ -54,12 +63,11 @@ protected:
 
 	[[nodiscard]] bool IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
 
-	playback_cmd StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps = ELEBOT_FPS) const;
+	[[nodiscard]] playback_cmd StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps = ELEBOT_FPS) const;
 	void EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd);
 
 	axis_t m_iAxis = {};
 	cardinal_dir m_iDirection = {};
-
 
 	float m_fTargetPosition = {};
 	float m_fTotalDistance = {};
@@ -67,6 +75,7 @@ protected:
 
 	float m_fOldOrigin = {};
 
+	float m_fInitialYaw = {};
 	float m_fTargetYaw = {};
 	float m_fTargetYawDelta = 45.f;
 
@@ -86,20 +95,23 @@ private:
 class CElebot
 {
 	NONCOPYABLE(CElebot);
+	friend void CL_FinishMove(usercmd_s* cmd);
 
 public:
 
-	CElebot(const playerState_s* ps, axis_t axis, float targetPosition);
+	CElebot(const playerState_s* ps, axis_t axis, float targetPosition, elebot_flags f=all_flags);
 	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
 private:
+
+	CElebotBase* GetMove(const playerState_s* ps);
 
 	std::unique_ptr<CGroundElebot> m_pGroundMove;
 	std::unique_ptr<CAirElebot> m_pAirMove;
 
 };
 
-
+struct traceResults_t;
 
 class CStaticElebot
 {
@@ -109,7 +121,14 @@ public:
 	static std::unique_ptr<CElebot> Instance;
 
 	static void EB_MoveToCursor();
+	static void EB_StartAutomatically(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);
+
+	[[nodiscard]] static std::unique_ptr<traceResults_t> EB_VelocityGotClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);
+	[[nodiscard]] static std::unique_ptr<traceResults_t> EB_VelocityGotClippedInTheAir(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);
+
 
 private:
+	static float m_fOldAutoPosition;
+	
 
 };

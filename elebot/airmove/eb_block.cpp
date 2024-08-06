@@ -5,11 +5,13 @@
 
 #include "cg/cg_local.hpp"
 #include "cg/cg_client.hpp"
+#include "com/com_channel.hpp"
+
+#include "utils/functions.hpp"
 
 #include <cassert>
 #include <iostream>
 #include <ranges>
-#include <com/com_channel.hpp>
 #include <iomanip>
 #include <algorithm>
 
@@ -41,12 +43,18 @@ CBlockElebot::~CBlockElebot() = default;
 bool CBlockElebot::Update([[maybe_unused]] const playerState_s* ps, [[maybe_unused]] usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)
 {
 
+	cmd->buttons |= cmdEnums::crouch;
+
 	if (!m_oFirstStep && !(m_oFirstStep = GetFirstStep()))
 		return false;
 
 	assert(m_oFirstStep != nullptr);
 
 	if (HasFinished()) {
+
+		cmd->forwardmove = 0;
+		cmd->rightmove = 0;
+		cmd->buttons |= cmdEnums::crouch;
 
 		//looks like it's gg -> now wait until we can playback the cmds
 		if (WaitForExit(ps, cmd, oldcmd))
@@ -70,11 +78,13 @@ bool CBlockElebot::Update([[maybe_unused]] const playerState_s* ps, [[maybe_unus
 	//keep goink
 	return true;
 }
+
+
+//statics crash in a manually mapped dll
+playerState_s ps_local;
 pmove_t CBlockElebot::GetInitialState() const
 {
-	//would be unfortunate if this got destructed when this function ends, right guys lol oh wait no one will ever read this
-	static playerState_s ps_local;
-	
+
 	ps_local = *m_pPlayerState;	
 	auto pm = PM_Create(&ps_local, &m_pPMove->cmd, &m_pPMove->oldcmd);
 
@@ -142,13 +152,13 @@ std::unique_ptr<CElebotInput> CBlockElebot::GetFirstStep() const
 	return std::make_unique<CElebotInput>(GetInitialState(), 1000 / frameTime);
 
 }
-constexpr float CBlockElebot::BinarySearchForFloat(CElebotInput& input) const{
+float CBlockElebot::BinarySearchForFloat(CElebotInput& input) const{
 
 	float& min = input.m_fMinYawDelta;
 	float& max = input.m_fMaxYawDelta;
 
-	// Get midpoint
-	const auto delta = min + (max - min) / 2.0f;
+	// Get midpoint with slight rng to avoid getting the same results everytime
+	const auto delta = (min + (max - min) / 2.0f) * random(0.9f, 1.1f);
 
 	if (IsPointTooFar(input.m_oPlayerstate->origin[m_oRefBase.m_iAxis])) 
 		min = delta;
@@ -171,7 +181,7 @@ bool CBlockElebot::FindInputs(CElebotInput& firstInput)
 	//keep going as long as we still have a meaningful half
 	while (int(firstInput.m_fYawDelta) && (firstInput.m_fMaxYawDelta - firstInput.m_fMinYawDelta > tolerance)) {
 
-		//do first step
+		//do the first step
 		if (FindInputForStep(sim, firstInput, firstInput, true)) {
 			if (OnCoordinateFound(sim, firstInput))
 				return true;
@@ -265,6 +275,7 @@ bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent,
 }
 void CBlockElebot::FixOverstepForFirstStep(CElebotInput& input)
 {
+	//slight randomness to prevent getting the same result each time
 	input.m_fMinYawDelta = input.m_fYawDelta * 1.5f;
 	if (input.m_fMinYawDelta > input.m_fMaxYawDelta)
 		std::swap(input.m_fMinYawDelta, input.m_fMaxYawDelta);
@@ -318,6 +329,8 @@ bool CBlockElebot::ValidateResult(CPmoveSimulation& sim)
 	auto ps = pm->ps;
 
 	const auto oldHeight = ps->origin[Z];
+
+	sim.GetAngles().right = m_oRefBase.m_fInitialYaw;
 
 	//do 10 +gostand simulations
 	for ([[maybe_unused]] const auto iter : std::views::iota(0, 10)) {

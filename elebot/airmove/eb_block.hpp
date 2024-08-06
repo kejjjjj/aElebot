@@ -52,10 +52,10 @@ protected:
 	float m_fMinHeight{};
 private:
 
-	pmove_t GetInitialState() const;
-	CSimulationController GenericCrouchedForwardmoveController(const usercmd_s* cmd) const;
+	[[nodiscard]] pmove_t GetInitialState() const;
+	[[nodiscard]] CSimulationController GenericCrouchedForwardmoveController(const usercmd_s* cmd) const;
 
-	[[nodiscard]] constexpr float BinarySearchForFloat(CElebotInput& input) const;
+	[[nodiscard]] float BinarySearchForFloat(CElebotInput& input) const;
 	[[nodiscard]] std::unique_ptr<CElebotInput> GetFirstStep() const;
 	[[nodiscard]] bool FindInputs(CElebotInput& firstInput);
 	[[nodiscard]] bool FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent, CElebotInput& input, bool isFirstInput);
