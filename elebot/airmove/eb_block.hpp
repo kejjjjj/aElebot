@@ -9,6 +9,15 @@
 class CPmoveSimulation;
 struct CSimulationController;
 using playback_cmds = std::vector<playback_cmd>;
+
+struct CElebotInputControls
+{
+	std::int32_t m_iFPS = 333;
+	float m_fMinYawDelta = 0.f;
+	float m_fMaxYawDelta = 90.f;
+	float m_fYawDelta = 45.f;
+};
+
 struct CElebotInput
 {
 	NONCOPYABLE(CElebotInput);
@@ -18,11 +27,7 @@ struct CElebotInput
 
 	std::unique_ptr<pmove_t> m_oPMove;
 	std::unique_ptr<playerState_s> m_oPlayerstate;
-
-	std::int32_t m_iFPS = 333;
-	float m_fMinYawDelta = 0.f;
-	float m_fMaxYawDelta = 90.f;
-	float m_fYawDelta = 90.f;
+	CElebotInputControls m_oControls;
 };
 
 struct CBlockElebotPerformer
@@ -62,6 +67,8 @@ private:
 	[[nodiscard]] constexpr bool IsPointTooFar(float p) const noexcept;
 
 	void FixOverstepForFirstStep(CElebotInput& input);
+	void FixUnderstepForFirstStep(CElebotInput& input);
+
 	void InsertInput(pmove_t& pm);
 	void ClearInputs(CPmoveSimulation& sim, CElebotInput& input) noexcept;
 

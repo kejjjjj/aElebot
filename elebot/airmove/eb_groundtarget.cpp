@@ -135,6 +135,10 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 			//sim.Simulate();
 			m_pBlockerAvoidPlayerState = std::make_unique<playerState_s>(ps_local);
 			pm->ps = m_pBlockerAvoidPlayerState.get();
+
+			if ((ps->pm_flags & PMF_LADDER) != 0 || (ps->pm_flags & PMF_MANTLE) != 0)
+				break;
+
 			return pm;
 		}
 

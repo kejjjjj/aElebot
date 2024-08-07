@@ -20,13 +20,15 @@ constexpr float tolerance = 0.01f;
 
 CElebotInput::CElebotInput(const pmove_t& pm, std::int32_t fps) :
 	m_oPMove(std::make_unique<pmove_t>(pm)),
-	m_oPlayerstate(std::make_unique<playerState_s>(*pm.ps)),
-	m_iFPS(fps) {
+	m_oPlayerstate(std::make_unique<playerState_s>(*pm.ps)) {
+
+	m_oControls.m_iFPS = fps;
 	m_oPMove->ps = m_oPlayerstate.get();
 }
 CElebotInput::CElebotInput(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd, std::int32_t fps) :
-	m_oPlayerstate(std::make_unique<playerState_s>(*ps)),
-	m_iFPS(fps)  {
+	m_oPlayerstate(std::make_unique<playerState_s>(*ps)) {
+
+	m_oControls.m_iFPS = fps;
 	m_oPMove = std::make_unique<pmove_t>(PM_Create(m_oPlayerstate.get(), cmd, oldcmd));
 }
 
@@ -72,7 +74,7 @@ bool CBlockElebot::Update([[maybe_unused]] const playerState_s* ps, [[maybe_unus
 
 	if (!FindInputs(*m_oFirstStep)) {
 		//didn't find the inputs -> give up to avoid spam
-		return false;
+		return true;
 	}
 
 	//keep goink
@@ -154,17 +156,18 @@ std::unique_ptr<CElebotInput> CBlockElebot::GetFirstStep() const
 }
 float CBlockElebot::BinarySearchForFloat(CElebotInput& input) const{
 
-	float& min = input.m_fMinYawDelta;
-	float& max = input.m_fMaxYawDelta;
+	float& min = input.m_oControls.m_fMinYawDelta;
+	float& max = input.m_oControls.m_fMaxYawDelta;
 
 	// Get midpoint with slight rng to avoid getting the same results everytime
-	const auto delta = (min + (max - min) / 2.0f) * random(0.9f, 1.1f);
+	const auto delta = (min + (max - min) / 2.0f);
 
-	if (IsPointTooFar(input.m_oPlayerstate->origin[m_oRefBase.m_iAxis])) 
+	if (IsPointTooFar(input.m_oPlayerstate->origin[m_oRefBase.m_iAxis])) {
 		min = delta;
-	else 
+	}
+	else {
 		max = delta;
-	
+	}
 
 	// Return the midpoint
 	return min + (max - min) / 2.0f;
@@ -172,14 +175,21 @@ float CBlockElebot::BinarySearchForFloat(CElebotInput& input) const{
 
 bool CBlockElebot::FindInputs(CElebotInput& firstInput)
 {
-	assert(firstInput.m_iFPS > 0);
+	assert(firstInput.m_oControls.m_iFPS > 0);
 
 	auto pm = firstInput.m_oPMove.get();
+	auto& min = firstInput.m_oControls.m_fMinYawDelta;
+	auto& max = firstInput.m_oControls.m_fMaxYawDelta;
+	//auto& delta = firstInput.m_oControls.m_fYawDelta;
 
 	CPmoveSimulation sim(pm, GenericCrouchedForwardmoveController(&m_pPMove->cmd));
 
+	//in case it gets stuck in an infinite loop
+	constexpr auto MAX_ITERATIONS = 50;
+	auto iteration = 0u;
+
 	//keep going as long as we still have a meaningful half
-	while (int(firstInput.m_fYawDelta) && (firstInput.m_fMaxYawDelta - firstInput.m_fMinYawDelta > tolerance)) {
+	while (max - min > tolerance && ++iteration < MAX_ITERATIONS) {
 
 		//do the first step
 		if (FindInputForStep(sim, firstInput, firstInput, true)) {
@@ -216,7 +226,7 @@ bool CBlockElebot::FindInputs(CElebotInput& firstInput)
 		ClearInputs(sim, firstInput);
 	}
 
-	Com_Printf("^1didn't find inputs\n");
+	Com_Printf("^1failure\n");
 	return false;
 }
 bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent, CElebotInput& input, bool isFirstInput)
@@ -226,15 +236,15 @@ bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent,
 	auto oldState = *oldPm->ps;
 	auto& angles = sim.GetAngles();
 
-	auto& min = input.m_fMinYawDelta;
-	auto& max = input.m_fMaxYawDelta;
-	auto& delta = input.m_fYawDelta;
+	auto& min = input.m_oControls.m_fMinYawDelta;
+	auto& max = input.m_oControls.m_fMaxYawDelta;
+	auto& delta = input.m_oControls.m_fYawDelta;
 
 	std::vector<float> positions;
 
 	//simulation now edits the input state
 	sim.pm = input.m_oPMove.get();
-	sim.FPS = input.m_iFPS;
+	sim.FPS = input.m_oControls.m_iFPS;
 
 	do {
 
@@ -256,16 +266,20 @@ bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent,
 		//first input can only iterate once per precise step loop
 		if (isFirstInput) 
 			return false;
-		
+
 		positions.push_back(pm->ps->origin[base.m_iAxis]);
 
-	} while (int(delta) && (delta < 90.f - tolerance) && (max - min > tolerance));
+	} while ((delta < 90.f - tolerance) && (max - min > tolerance));
 
 
 	//if all predicted positions overstepped, fix the delta for the first step
 	if (std::ranges::all_of(positions, [this](float p) { return IsPointTooFar(p); })) 
 		FixOverstepForFirstStep(parent);
 	
+	//if all predicted positions understepped, fix the delta for the first step
+	if (std::ranges::all_of(positions, [this](float p) { return !IsPointTooFar(p); }))
+		FixUnderstepForFirstStep(parent);
+
 	return false;
 
 }
@@ -273,12 +287,21 @@ bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent,
 {
 	return m_oRefBase.IsPointTooFar(p);
 }
+
+
 void CBlockElebot::FixOverstepForFirstStep(CElebotInput& input)
 {
-	//slight randomness to prevent getting the same result each time
-	input.m_fMinYawDelta = input.m_fYawDelta * 1.5f;
-	if (input.m_fMinYawDelta > input.m_fMaxYawDelta)
-		std::swap(input.m_fMinYawDelta, input.m_fMaxYawDelta);
+	auto& controls = input.m_oControls;
+	controls.m_fMinYawDelta = controls.m_fYawDelta * 1.5f;
+	if (controls.m_fMinYawDelta > controls.m_fMaxYawDelta)
+		std::swap(controls.m_fMinYawDelta, controls.m_fMaxYawDelta);
+}
+void CBlockElebot::FixUnderstepForFirstStep(CElebotInput& input)
+{
+	auto& controls = input.m_oControls;
+	controls.m_fMaxYawDelta -= 0.1f;
+	if (controls.m_fMinYawDelta > controls.m_fMaxYawDelta)
+		std::swap(controls.m_fMinYawDelta, controls.m_fMaxYawDelta);
 }
 bool CBlockElebot::OnCoordinateFound(CPmoveSimulation& sim, CElebotInput& input)
 {
