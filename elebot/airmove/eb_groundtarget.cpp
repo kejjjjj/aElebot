@@ -15,9 +15,12 @@
 #include <ranges>
 #include <cassert>
 #include <iostream>
+#include <cg/cg_client.hpp>
 
 using FailCondition = CPmoveSimulation::StopPositionInput_t::FailCondition_e;
 using TargetAxes = CPmoveSimulation::StopPositionInput_t::TargetAxes_e;
+
+constexpr float CAREFUL_THRESHOLD_DISTANCE = 0.125f;
 
 CElebotGroundTarget::CElebotGroundTarget(CElebotBase& base) 
 	: CAirElebotVariation(base) 
@@ -30,50 +33,42 @@ bool CElebotGroundTarget::Update([[maybe_unused]] const playerState_s* ps, [[may
 {
 	auto& base = m_oRefBase;
 
-
-	//todo: add movement corrections when distance > 2.f
-	//^^^^^ will do after I find a use case for it ^^^^^
-
 	//if stuck against a wall while falling
 	const auto beingClipped = base.IsVelocityBeingClipped(ps, cmd, oldcmd);
 	if (m_pBlockerAvoidState || ps->velocity[Z] < 0 && beingClipped) {
-		return UpdateBlocker(ps, cmd, oldcmd);
+		return UpdateBlocker(ps, cmd, oldcmd, reinterpret_cast<BlockFunc>(&CElebotGroundTarget::TryGoingUnderTheBlocker));
 	}
 
 	//the code below doesn't work when being clipped..
 	if (beingClipped)
 		return true;
 
-	//it might give more airtime when crouched (hitting head)
-	cmd->buttons |= cmdEnums::crouch;
-
-	//tries to CAREFULLY step midair
-	//which means this is not super quick!
-	if (CanStep(ps, cmd, oldcmd)) {
-		Step(ps, cmd);
-		return true;
+	if (ResetVelocity(ps, cmd, oldcmd)) {
+		if (CanStep(ps, cmd, oldcmd)) {
+			Step(ps, cmd);
+			return true;
+		}
 	}
-
-
 
 	return m_oRefBase.HasFinished(ps) == false;
 }
-bool CElebotGroundTarget::UpdateBlocker(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
+bool CElebotGroundTarget::UpdateBlocker(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd, BlockFunc func)
 {
-	if (!GetBlocker(ps, cmd, oldcmd))
+	if (!GetBlocker(ps, cmd, oldcmd, func))
 		return true;
 
 	assert(m_pBruteForcer != nullptr);
 	return m_pBruteForcer->Update(ps, cmd, oldcmd);
 }
-bool CElebotGroundTarget::GetBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd)
+bool CElebotGroundTarget::GetBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd, 
+	const BlockFunc& func)
 {
 	if (m_pBlockerAvoidState) {
 		return true;
 	}
 
 	//see if we can get under the brush 
-	m_pBlockerAvoidState = TryGoingUnderTheBlocker(ps, cmd, oldcmd);
+	m_pBlockerAvoidState = (this->*func)(ps, cmd, oldcmd);
 
 	if (m_pBlockerAvoidState) {
 		m_fBlockerMinHeight = m_pBlockerAvoidState->ps->origin[Z];
@@ -92,7 +87,7 @@ bool CElebotGroundTarget::GetBlocker(const playerState_s* ps, const usercmd_s* c
 }
 std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
 {
-	//at this point we know we are stuck hugging a wall
+	//at this point we know that we are stuck hugging a wall
 
 	const auto& base = m_oRefBase;
 	auto ps_local = *ps;
@@ -101,7 +96,7 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 
 	CSimulationController c;
 
-	c.FPS = 333;
+	c.FPS = ELEBOT_FPS;
 	c.forwardmove = 0;
 	c.rightmove = 0;
 	c.weapon = cmd->weapon;
@@ -114,31 +109,29 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 		.viewangles = {
 			ps->viewangles[PITCH], 
 			base.m_fTargetYaw, 
-			ps->viewangles[ROLL] 
+			0.f
 		}, 
 		.angle_enum = EViewAngle::FixedAngle, .smoothing = 0.f 
 	};
 
 	CPmoveSimulation sim(pm.get(), c);
 
+	constexpr auto MAX_ITERATIONS = 10000u;
+	auto iteration = 0u;
 	do {
 
-		if (!sim.Simulate())
+		if (!sim.Simulate() || ++iteration > MAX_ITERATIONS)
 			break;
 
 		memcpy(&pm->oldcmd, &pm->cmd, sizeof(usercmd_s));
 
-		m_oCmds.emplace_back(base.StateToPlayback(pm->ps, &pm->cmd));
+		if ((ps->pm_flags & PMF_LADDER) != 0 || (ps->pm_flags & PMF_MANTLE) != 0)
+			break;
 
 		//wow would you look at that we can move under the target
 		if (ps->velocity[Z] <= 0 && !base.IsVelocityBeingClipped(pm->ps, &pm->cmd, &pm->oldcmd)) {
-			//sim.Simulate();
 			m_pBlockerAvoidPlayerState = std::make_unique<playerState_s>(ps_local);
 			pm->ps = m_pBlockerAvoidPlayerState.get();
-
-			if ((ps->pm_flags & PMF_LADDER) != 0 || (ps->pm_flags & PMF_MANTLE) != 0)
-				break;
-
 			return pm;
 		}
 
@@ -146,26 +139,182 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 	} while (pm->ps->groundEntityNum == 1023);
 
 	//tough luck bud
-	m_oCmds.clear();
 	return nullptr;
 
 }
+
+pmove_t previousPmove;
+playerState_s previousPlayerState;
+std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlockerFromDistance(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
+{
+	//at this point we know that we are some units away from the wall and we want to get under it without touching it
+
+	const auto& base = m_oRefBase;
+	auto ps_local = *ps;
+	auto pm = std::make_unique<pmove_t>(PM_Create(&ps_local, cmd, oldcmd));
+
+	CSimulationController c;
+
+	c.FPS = ELEBOT_FPS;
+	c.forwardmove = 127;
+	c.rightmove = 0;
+	c.weapon = cmd->weapon;
+	c.offhand = cmd->offHandIndex;
+
+	//only crouch
+	c.buttons = cmdEnums::crouch;
+
+	c.viewangles = CSimulationController::CAngles{
+		.viewangles = {
+			ps->viewangles[PITCH],
+			base.m_fTargetYaw,
+			0.f
+		},
+		.angle_enum = EViewAngle::FixedAngle, .smoothing = 0.f
+	};
+
+	CPmoveSimulation sim(pm.get(), c);
+	constexpr auto MAX_ITERATIONS = 10000u;
+	auto iteration = 0u;
+
+	previousPmove = *pm;
+	previousPlayerState = *pm->ps;
+
+	//simulate holding W and see if we no longer get blocked
+	while (!base.IsPointTooFar(pm->ps->origin[base.m_iAxis])) {
+
+		sim.forwardmove = 127;
+
+		if (!sim.Simulate() || ++iteration > MAX_ITERATIONS)
+			return nullptr;
+
+		memcpy(&pm->oldcmd, &pm->cmd, sizeof(usercmd_s));
+
+		//oops we hit a wall...
+		if (base.IsVelocityBeingClipped(pm->ps, &pm->cmd, &pm->oldcmd)) {
+			*pm = previousPmove;
+			ps_local = previousPlayerState;
+			pm->ps = &ps_local;
+			
+			//ok then just keep falling without doing anything
+			sim.forwardmove = 0;
+			sim.Simulate();
+			memcpy(&pm->oldcmd, &pm->cmd, sizeof(usercmd_s));
+
+			//copy state
+			previousPmove = *pm;
+			previousPlayerState = *pm->ps;
+			continue;
+		}
+
+		m_pBlockerAvoidPlayerState = std::make_unique<playerState_s>(previousPlayerState);
+		pm->ps = m_pBlockerAvoidPlayerState.get();
+
+		return pm;
+
+
+	}
+	//tough luck bud
+	return nullptr;
+}
+
+bool CElebotGroundTarget::ResetVelocity(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd)
+{
+	auto& base = m_oRefBase;
+	auto& axis = base.m_iAxis;
+
+	const auto remainingDistance = base.GetRemainingDistance();
+
+	if (remainingDistance >= 0.f && remainingDistance < CAREFUL_THRESHOLD_DISTANCE && ps->velocity[axis] == 0.f)
+		return true;
+
+	playerState_s local_ps = *ps;
+	usercmd_s ccmd = *cmd;
+	ccmd.forwardmove = -127;
+	ccmd.angles[YAW] = ANGLE2SHORT(AngleDelta(base.m_fTargetYaw, ps->delta_angles[YAW]));
+	auto pm = PM_Create(&local_ps, &ccmd, oldcmd);
+	CPmoveSimulation sim(&pm);
+	sim.FPS = ELEBOT_FPS;
+
+	//const auto DISTANCE_FROM_WALL = 1.f * (ps->speed / 190.f);
+	const auto DISTANCE_FROM_WALL = 0.f;
+
+	auto bVelocityClipped = false;
+	auto bGrounded = false;
+	auto bIsCorrectVelocityDirection = true;
+
+	trace_t clipTrace{};
+	CElebotBase::velocityClipping_t clipping{
+		.ps = pm.ps,
+		.cmd = &pm.cmd,
+		.oldcmd = &pm.oldcmd,
+		.boundsDelta = DISTANCE_FROM_WALL,
+		.trace = &clipTrace
+	};
+
+
+	while (!bGrounded && bIsCorrectVelocityDirection)  {
+
+		sim.Simulate(&pm.cmd, &pm.oldcmd);
+		memcpy(&pm.oldcmd, &pm.cmd, sizeof(usercmd_s));
+
+		bVelocityClipped = base.IsVelocityBeingClippedAdvanced(clipping);
+		bGrounded = CG_IsOnGround(pm.ps);
+		bIsCorrectVelocityDirection = base.IsCorrectVelocityDirection(pm.ps->velocity[axis]);
+	}
+
+	if (bGrounded)
+		return false;
+
+	const auto distTravelled = base.GetDistanceTravelled(ps->origin[base.m_iAxis], base.IsUnsignedDirection());
+	const float distance = base.m_fTotalDistance - distTravelled;
+
+	if (pm.ps->velocity[axis] == 0.f && !bVelocityClipped && distance < CAREFUL_THRESHOLD_DISTANCE) {
+		//calling TryGoingUnderTheBlockerFromDistance from here gives a pretty good 
+		//start to trying to move under the target from a distance
+		//but I don't want to work on that now....
+		return true;
+	}
+
+	//at this point velocity has flipped
+	if (bVelocityClipped || base.IsPointTooFar(pm.ps->origin[axis])) {
+		//too much velocity and we overstepped :(
+		pm.cmd.forwardmove = -127;
+	} else {
+
+		//looks like it's still safe to move forward
+		pm.cmd.forwardmove = 127;
+
+		//simulate one more to the future
+		sim.Simulate(&sim.pm->cmd, &sim.pm->oldcmd);
+		memcpy(&sim.pm->oldcmd, &sim.pm->cmd, sizeof(usercmd_s));
+
+		if(base.IsVelocityBeingClippedAdvanced(clipping) || base.IsPointTooFar(pm.ps->origin[axis])) {
+			//woops looks like we are edging, go back
+			pm.cmd.forwardmove = -127;
+		}
+	}
+
+	base.EmplacePlaybackCommand(pm.ps, &pm.cmd);
+	return false;
+
+}
+
 bool CElebotGroundTarget::CanStep(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
 {
 	auto& base = m_oRefBase;
 
-	//todo: fix the magic number to something that works with all g_speed values
-	if (base.GetRemainingDistance() > 2.f || std::fabsf(ps->velocity[base.m_iAxis]) != 0.f)
+	const auto remainingDistance = base.GetRemainingDistance();
+
+	if (remainingDistance > CAREFUL_THRESHOLD_DISTANCE || std::fabsf(ps->velocity[base.m_iAxis]) != 0.f)
 		return false;
+
+	const auto resetDelta = remainingDistance >= 0.f ? 45.f : -45.f;
 
 
 	//limit the amount so that fps doesn't become an issue (this should never be the case, but just to be sure)
 	constexpr auto MAX_ITERATIONS = ELEBOT_FPS;
 	for([[maybe_unused]]const auto i : std::views::iota(0u, MAX_ITERATIONS)){
-		
-		if (WASD_PRESSED())
-			break;
-
 		playerState_s local_ps = *ps;
 
 		usercmd_s ccmd = *cmd;
@@ -195,7 +344,7 @@ bool CElebotGroundTarget::CanStep(const playerState_s* ps, const usercmd_s* cmd,
 		const bool tooFar = base.IsPointTooFar(predictedPosition);
 
 		if (predictedPosition == ps->origin[base.m_iAxis]) {
-			base.m_fTargetYawDelta = 45.f;
+			base.m_fTargetYawDelta = resetDelta;
 			return false;
 		}
 

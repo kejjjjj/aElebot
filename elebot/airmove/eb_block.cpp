@@ -74,7 +74,7 @@ bool CBlockElebot::Update([[maybe_unused]] const playerState_s* ps, [[maybe_unus
 
 	if (!FindInputs(*m_oFirstStep)) {
 		//didn't find the inputs -> give up to avoid spam
-		return true;
+		return false;
 	}
 
 	//keep goink
@@ -132,8 +132,10 @@ std::unique_ptr<CElebotInput> CBlockElebot::GetFirstStep() const
 		pm = GetInitialState();
 		sim.FPS = 1000 / frameTime++;
 
-		if (!sim.FPS || !sim.Simulate())
+		if (!sim.FPS || !sim.Simulate()) {
+			//too many iterations
 			return 0;
+		}
 
 	} while (!IsPointTooFar(pm.ps->origin[base.m_iAxis]));
 

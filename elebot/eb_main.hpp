@@ -13,6 +13,7 @@ class CGroundElebot;
 class CAirElebot;
 
 struct playback_cmd;
+struct trace_t;
 
 using ElebotUpdate_f = bool(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd);
 
@@ -22,6 +23,8 @@ enum elebot_flags
 	airmove = 1 << 2,
 	all_flags = 0xFFFFFFFF
 };
+
+
 
 class CElebotBase
 {
@@ -45,6 +48,10 @@ public:
 	void OnFrameStart(const playerState_s* ps) noexcept;
 
 	[[nodiscard]] virtual bool HasFinished(const playerState_s* ps) const noexcept;
+
+	//something silly happened and it's probably better if you reinitialize the elebot with the same data
+	[[nodiscard]] constexpr inline bool TryAgain() const noexcept { return m_bTryAgain; }
+
 protected:
 	[[nodiscard]] virtual constexpr float GetRemainingDistance() const noexcept;
 	[[nodiscard]] virtual constexpr float GetRemainingDistance(const float p) const noexcept;
@@ -61,7 +68,18 @@ protected:
 
 	virtual void ApplyMovementDirectionCorrections(const playerState_s* ps) noexcept;
 
+	struct velocityClipping_t
+	{
+		const playerState_s* ps;
+		const usercmd_s* cmd;
+		const usercmd_s* oldcmd;
+		float boundsDelta = 0.125f;
+		float clipPos = {};
+		trace_t* trace = nullptr;
+	};
+
 	[[nodiscard]] bool IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
+	[[nodiscard]] bool IsVelocityBeingClippedAdvanced(velocityClipping_t& init) const;
 
 	[[nodiscard]] playback_cmd StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps = ELEBOT_FPS) const;
 	void EmplacePlaybackCommand(const playerState_s* ps, const usercmd_s* cmd);
@@ -81,8 +99,9 @@ protected:
 
 	std::int8_t m_cRightmove = -127;
 	std::int8_t m_cForwardMove = 127;
-
 	std::int8_t m_cForwardDirection = 127;
+
+	bool m_bTryAgain = false;
 
 private:
 
@@ -102,6 +121,7 @@ public:
 	CElebot(const playerState_s* ps, axis_t axis, float targetPosition, elebot_flags f=all_flags);
 	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
+	[[nodiscard]] bool TryAgain() const noexcept;
 private:
 
 	CElebotBase* GetMove(const playerState_s* ps);
@@ -109,6 +129,11 @@ private:
 	std::unique_ptr<CGroundElebot> m_pGroundMove;
 	std::unique_ptr<CAirElebot> m_pAirMove;
 
+	struct init_data {
+		axis_t m_iAxis{};
+		float m_fTargetPosition{};
+		elebot_flags m_iElebotFlags = all_flags;
+	}m_oInit;
 };
 
 struct traceResults_t;

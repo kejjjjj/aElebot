@@ -190,31 +190,31 @@ void CElebotBase::ApplyMovementDirectionCorrections(const playerState_s* ps) noe
 	else
 		m_cForwardMove = m_cForwardDirection;
 }
-bool CElebotBase::IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
+bool CElebotBase::IsVelocityBeingClippedAdvanced(velocityClipping_t& init) const
 {
 
+	auto pm = PM_Create(const_cast<playerState_s*>(init.ps), init.cmd, init.oldcmd);
+	fvec3 start = pm.ps->origin; 
+	fvec3 end = start;
+
+	end[m_iAxis] += IsUnsignedDirection() ? init.boundsDelta : -init.boundsDelta;
+	pm.mins[Z] = (pm.ps->pm_flags & PMF_PRONE) != 0 ? 10.f : 18.f;
+
+	trace_t trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
+	init.clipPos = (start + (end - start) * trace.fraction)[m_iAxis];
+	if (init.trace) 
+		*init.trace = trace;
+
+	return (trace.fraction < 1.f || trace.startsolid || trace.allsolid || std::abs(trace.normal[m_iAxis]) == 1.f && std::abs(trace.normal[Z]) == 0.f);
+
+}
+bool CElebotBase::IsVelocityBeingClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const
+{
 	if (ps->velocity[m_iAxis] != 0.f)
 		return false;
 
-	//playerstate won't get modified
-	auto pm = PM_Create(const_cast<playerState_s*>(ps), cmd, oldcmd);
-
-	fvec3 end = pm.ps->origin;
-
-	end[m_iAxis] += IsUnsignedDirection() ? 0.125f : -0.125f;
-
-	//velocity does NOT get clipped when the step is this low
-	pm.mins[Z] = (pm.ps->pm_flags & PMF_PRONE) != 0 ? 10.f : 18.f;
-
-
-	trace_t trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
-	
-	//didn't hit anything
-	if ((fvec3&)trace.normal == fvec3(0,0,0) && !trace.material)
-		return false;
-
-	return std::abs(trace.normal[m_iAxis]) == 1.f && std::abs(trace.normal[Z]) == 0.f;
-
+	auto clipping = velocityClipping_t{ .ps = ps, .cmd = cmd, .oldcmd = oldcmd };
+	return IsVelocityBeingClippedAdvanced(clipping);
 }
 playback_cmd CElebotBase::StateToPlayback(const playerState_s* ps, const usercmd_s* cmd, std::uint32_t fps) const
 {
@@ -250,12 +250,22 @@ CElebot::CElebot(const playerState_s* ps, axis_t axis, float targetPosition, ele
 		m_pAirMove->SetGroundTarget();
 	}
 
+	m_oInit = {
+		.m_iAxis = axis,
+		.m_fTargetPosition = targetPosition,
+		.m_iElebotFlags = f
+	};
+
 }
 CElebot::~CElebot() = default;
 
 CElebotBase* CElebot::GetMove(const playerState_s* ps)
 {
 	return CG_IsOnGround(ps) ? reinterpret_cast<CElebotBase*>(m_pGroundMove.get()) : reinterpret_cast<CElebotBase*>(m_pAirMove.get());
+}
+bool CElebot::TryAgain() const noexcept
+{
+	return m_pGroundMove && m_pGroundMove->TryAgain() || m_pAirMove && m_pAirMove->TryAgain();
 }
 bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 {
@@ -322,26 +332,29 @@ void CStaticElebot::EB_MoveToCursor()
 void CStaticElebot::EB_StartAutomatically(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd)
 {
 
-	//if ( (ps->pm_flags & PMF_DUCKED) != 0) {
-		if(auto ptr = EB_VelocityGotClippedInTheAir(ps, cmd, oldcmd))
-			//only airmove movements allowed!
-			Instance = std::make_unique<CElebot>(ps, ptr->axis, ptr->hitpos, airmove);
-	//}
+	if (auto ptr = EB_VelocityGotClippedInTheAir(ps, cmd, oldcmd)) {
+		//only airmove movements allowed!
+		Instance = std::make_unique<CElebot>(ps, ptr->axis, ptr->hitpos, airmove);
+	}
+	
 
 
 }
-traceResults_t CG_TraceCardinalDirection(const pmove_t& pm, axis_t axis, float threshold)
+traceResults_t CG_TraceCardinalDirection(pmove_t& pm, axis_t axis, float threshold)
 {
-	const float TRACE_SIZE = threshold >= 0 ? pm.maxs[axis] : -pm.mins[axis];
-	constexpr float HITBOX_SIZE = 15.f;
-	constexpr float TRACE_CORRECTION = 0.125f;
 
 	fvec3 start = pm.ps->origin;
 	fvec3 end = start;
 	end[axis] += threshold;
 
-	auto trace = CG_TracePoint(pm.mins, pm.maxs, pm.ps->origin, end, pm.tracemask);
-	const auto hitpos = (start + (end - start) * trace.fraction) + (fvec3(trace.normal) * (HITBOX_SIZE - TRACE_SIZE - TRACE_CORRECTION));
+	const auto allSolidDelta = threshold < 0 ? 0.250f : -0.250f; //0.250 = (14.125 + 0.125) - 14  
+
+	pm.mins[axis] = -1;
+	pm.maxs[axis] = 1;
+
+
+	auto trace = CG_TracePoint(pm.mins, pm.maxs, start, end, pm.tracemask);
+	const auto hitpos = (start + (end - start) * trace.fraction) - (threshold + allSolidDelta); 
 	return { trace, axis, hitpos[axis] };
 }
 
@@ -361,15 +374,17 @@ std::unique_ptr<traceResults_t> CStaticElebot::EB_VelocityGotClipped(const playe
 		return 0;
 
 	auto pm = PM_Create(const_cast<playerState_s*>(ps), cmd, oldcmd);	
-	traceResults_t trace;
 
-	constexpr std::array<float, 2> values = { 0.125f, -0.125f };
+	constexpr std::array<float, 2> values = { 14.125f, -14.125f };
 
 	for (const auto& value : values) {
 		for (const auto i : std::views::iota(int(X), int(Z))) {
 			const auto axis = axis_t(i);
 
-			trace = CG_TraceCardinalDirection(pm, axis, value);
+			pm.mins[axis] = -15;
+			pm.maxs[axis] = 15;
+
+			traceResults_t trace = CG_TraceCardinalDirection(pm, axis, value);
 			if (CG_TraceHitCardinalSurface(trace, axis)) {
 
 				//don't calculate the same thing again...
@@ -377,6 +392,7 @@ std::unique_ptr<traceResults_t> CStaticElebot::EB_VelocityGotClipped(const playe
 					return 0;
 
 				m_fOldAutoPosition = ps->origin[axis];
+
 				return std::make_unique<traceResults_t>(trace);
 			}
 
@@ -388,7 +404,9 @@ std::unique_ptr<traceResults_t> CStaticElebot::EB_VelocityGotClipped(const playe
 }
 std::unique_ptr<traceResults_t> CStaticElebot::EB_VelocityGotClippedInTheAir(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd)
 {
-	if (CG_IsOnGround(ps)) {
+	
+
+	if (CG_IsOnGround(ps) || CG_HasFlag(ps, PMF_LADDER | PMF_MANTLE)) {
 		m_fOldAutoPosition = 0;
 		return 0;
 	}
