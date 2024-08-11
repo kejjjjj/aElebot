@@ -31,6 +31,8 @@ return 0;
 static void NVar_Setup([[maybe_unused]]NVarTable* table)
 {
     table->AddImNvar<bool, ImCheckbox>("Elevate everything", false, NVar_ArithmeticToString<bool>);
+    table->AddImNvar<bool, ImCheckbox>("Auto standup", true, NVar_ArithmeticToString<bool>);
+
 }
 
 #if(DEBUG_SUPPORT)

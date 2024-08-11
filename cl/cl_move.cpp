@@ -34,9 +34,18 @@ void CL_FinishMove(usercmd_s* cmd)
 			}
 
 			if (elebot && !elebot->Update(ps, cmd, oldcmd)) {
+
+				//yea try again
+				if (elebot->TryAgain()) {
+					ps->viewangles[YAW] = elebot->GetMove(ps)->m_fInitialYaw;
+					elebot = std::make_unique<CElebot>(ps, elebot->m_oInit);
+					
+					return;
+				}
+
 				if (const auto base = elebot->GetMove(ps)) {
 					if (base->HasFinished(ps)) {
-						CL_SetPlayerAngles(cmd, ps->delta_angles, { ps->viewangles[PITCH], base->m_fTargetYaw, ps->viewangles[ROLL] });
+						CL_SetPlayerAngles(cmd, ps->delta_angles, { ps->viewangles[PITCH], base->m_fInitialYaw, 0.f });
 					}
 				}
 				elebot.reset();
@@ -51,7 +60,6 @@ void CL_FinishMove(usercmd_s* cmd)
 #if(DEBUG_SUPPORT)
 		CStaticMovementRecorder::Instance->Update(ps, cmd, oldcmd);
 #endif
-
 	}
 
 	return;

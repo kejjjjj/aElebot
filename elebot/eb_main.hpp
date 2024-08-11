@@ -4,13 +4,14 @@
 #include <vector>
 
 #include "cg/cg_angles.hpp"
-
+#include "utils/typedefs.hpp"
 
 constexpr auto ELEBOT_FPS = 333u;
 
 
 class CGroundElebot;
 class CAirElebot;
+class CElebotStandup;
 
 struct playback_cmd;
 struct trace_t;
@@ -34,12 +35,15 @@ class CElebotBase
 	friend class CElebotWorldTarget;
 	friend class CQLearnElebot;
 	friend class CBlockElebot;
+	friend class CDetachElebot;
+	friend class CElebotStandup;
 
 	friend void CL_FinishMove(usercmd_s* cmd);
 
 public:
-	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition);
+	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals);
 	virtual ~CElebotBase();
+
 	[[nodiscard]] virtual ElebotUpdate_f Update = 0;
 
 	void PushPlayback();
@@ -53,6 +57,8 @@ public:
 	[[nodiscard]] constexpr inline bool TryAgain() const noexcept { return m_bTryAgain; }
 
 protected:
+	void ResolveYawConflict(const fvec3& normals);
+
 	[[nodiscard]] virtual constexpr float GetRemainingDistance() const noexcept;
 	[[nodiscard]] virtual constexpr float GetRemainingDistance(const float p) const noexcept;
 	[[nodiscard]] constexpr float GetDistanceTravelled(const float p, bool isUnSignedDirection) const noexcept;
@@ -118,7 +124,15 @@ class CElebot
 
 public:
 
-	CElebot(const playerState_s* ps, axis_t axis, float targetPosition, elebot_flags f=all_flags);
+	struct init_data {
+		axis_t m_iAxis{};
+		float m_fTargetPosition{};
+		elebot_flags m_iElebotFlags = all_flags;
+		fvec3 m_vecTargetNormals;
+		bool m_bAutoStandUp = true;
+	}m_oInit;
+
+	CElebot(const playerState_s* ps, const init_data& init);
 	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
 	[[nodiscard]] bool TryAgain() const noexcept;
@@ -128,12 +142,8 @@ private:
 
 	std::unique_ptr<CGroundElebot> m_pGroundMove;
 	std::unique_ptr<CAirElebot> m_pAirMove;
+	std::unique_ptr<CElebotStandup> m_pStandup;
 
-	struct init_data {
-		axis_t m_iAxis{};
-		float m_fTargetPosition{};
-		elebot_flags m_iElebotFlags = all_flags;
-	}m_oInit;
 };
 
 struct traceResults_t;

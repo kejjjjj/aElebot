@@ -18,8 +18,8 @@
 using FailCondition = CPmoveSimulation::StopPositionInput_t::FailCondition_e;
 
 
-CGroundElebot::CGroundElebot(const playerState_s* ps, axis_t axis, float targetPosition) 
-	: CElebotBase(ps, axis, targetPosition)
+CGroundElebot::CGroundElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals)
+	: CElebotBase(ps, axis, targetPosition, targetNormals)
 {
 
 	const auto d = static_cast<float>(CG_RoundAngleToCardinalDirection(ps->viewangles[YAW]));
@@ -40,11 +40,16 @@ CGroundElebot::~CGroundElebot() = default;
 
 bool CGroundElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)
 {
+	if (HasFinished(ps))
+		return false;
+
 	if (WASD_PRESSED())
 		return false;
 
-	if (HasFinished(ps))
+	if (IsPointTooFar(ps->origin[m_iAxis])) {
+		m_bTryAgain = true;
 		return false;
+	}
 
 	if (CanSprint(ps)) {
 		Sprint(ps, cmd);
@@ -113,8 +118,10 @@ void CGroundElebot::StopSprinting(usercmd_s* cmd) const noexcept
 
 bool CGroundElebot::CanWalk(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept
 {
-	if (m_bWalkingIsTooDangerous)
+	if ((GetRemainingDistance() < (0.125f * (ps->speed / 190.f)))) {
+		m_bWalkingIsTooDangerous = true;
 		return false;
+	}
 
 	playerState_s local_ps = *ps;
 
@@ -182,7 +189,7 @@ void CGroundElebot::StepLongitudinally(const playerState_s* ps, usercmd_s* cmd)
 	ccmd.forwardmove = m_cForwardMove;
 	ccmd.rightmove = 0;
 	ccmd.angles[YAW] = ANGLE2SHORT(AngleDelta(m_fTargetYaw, ps->delta_angles[YAW]));
-	ccmd.buttons |= (IsMovingBackwards() ? cmdEnums::crouch : 0);
+	//ccmd.buttons |= (IsMovingBackwards() ? cmdEnums::crouch : 0);
 	EmplacePlaybackCommand(ps, &ccmd);
 }
 bool CGroundElebot::CanStepSideways(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) noexcept
@@ -257,7 +264,7 @@ void CGroundElebot::StepSideways(const playerState_s* ps, usercmd_s* cmd)
 	usercmd_s ccmd = *cmd;
 	ccmd.forwardmove = 0;
 	ccmd.rightmove = m_cRightmove;
-	ccmd.buttons |= (IsMovingBackwards() ? cmdEnums::crouch : 0);
+	//ccmd.buttons |= (IsMovingBackwards() ? cmdEnums::crouch : 0);
 
 	const auto yaw = GetTargetYawForSidewaysMovement();
 

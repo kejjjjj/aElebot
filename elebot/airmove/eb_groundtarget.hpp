@@ -19,13 +19,13 @@ public:
 	[[nodiscard]] ElebotUpdate_f Update override;
 
 protected:
-	constexpr eElebotVariation type() const noexcept override { return ground; };
+	[[nodiscard]] constexpr eElebotVariation type() const noexcept override { return ground; };
 
 private:
-	bool UpdateBlocker(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd, BlockFunc func);
-	bool GetBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd, const BlockFunc& func);
-	std::unique_ptr<pmove_t> TryGoingUnderTheBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
-	std::unique_ptr<pmove_t> TryGoingUnderTheBlockerFromDistance(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
+	[[nodiscard]] bool UpdateBlocker(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd, BlockFunc func);
+	[[nodiscard]] bool GetBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd, const BlockFunc& func);
+	[[nodiscard]] std::unique_ptr<pmove_t> TryGoingUnderTheBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
+	[[nodiscard]] std::unique_ptr<pmove_t> TryGoingUnderTheBlockerFromDistance(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd) const;
 
 
 	[[nodiscard]] bool ResetVelocity(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);

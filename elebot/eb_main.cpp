@@ -11,9 +11,13 @@
 
 #include "com/com_channel.hpp"
 
-#include "eb_ground.hpp"
+
 #include "airmove/eb_airmove.hpp"
+#include "eb_ground.hpp"
 #include "eb_main.hpp"
+#include "eb_standup.hpp"
+
+#include "net/nvar_table.hpp"
 
 #include "utils/typedefs.hpp"
 #include "utils/functions.hpp"
@@ -49,7 +53,7 @@
 }
 std::unique_ptr<CElebot> CStaticElebot::Instance;
 
-CElebotBase::CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition) :
+CElebotBase::CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals) :
 	m_iAxis(axis), 
 	m_fTargetPosition(targetPosition),
 	m_fInitialYaw(ps->viewangles[YAW])
@@ -57,12 +61,26 @@ CElebotBase::CElebotBase(const playerState_s* ps, axis_t axis, float targetPosit
 	m_fTotalDistance = std::fabsf(m_fTargetPosition - ps->origin[axis]);
 	m_fDistanceTravelled = 0.f;
 
-	m_iDirection = GetCardinalDirection(ps->origin[axis], axis, m_fTargetPosition);
-	m_fTargetYaw = (float)m_iDirection;
+	if (ps->origin[axis] != m_fTargetPosition) {
+		m_iDirection = GetCardinalDirection(ps->origin[axis], axis, m_fTargetPosition);
+		m_fTargetYaw = (float)m_iDirection;
+	} else {
+		ResolveYawConflict(targetNormals);
+	}
 
 }
 CElebotBase::~CElebotBase() = default;
 
+void CElebotBase::ResolveYawConflict(const fvec3& normals)
+{
+	if (m_iAxis == X) 
+		m_fTargetYaw = (normals[X] == 1.f ? -180.f : 180.f);
+	else
+		m_fTargetYaw = (normals[Y] == 1.f ? -90.f : 90.f);
+
+	m_iDirection = CG_RoundAngleToCardinalDirection(m_fTargetYaw);
+
+}
 void CElebotBase::PushPlayback()
 {
 	if (m_oVecCmds.empty())
@@ -238,23 +256,32 @@ void CElebotBase::EmplacePlaybackCommand(const playerState_s* ps, const usercmd_
 {
 	m_oVecCmds.emplace_back(StateToPlayback(ps, cmd));
 }
-CElebot::CElebot(const playerState_s* ps, axis_t axis, float targetPosition, elebot_flags f)
+CElebot::CElebot(const playerState_s* ps, const init_data& init) : m_oInit(init)
 {
+	auto& f = m_oInit.m_iElebotFlags;
+	auto& axis = m_oInit.m_iAxis;
+	auto& targetPosition = m_oInit.m_fTargetPosition;
+	auto& targetNormals = m_oInit.m_vecTargetNormals;
+
+
 	if((f & groundmove) != 0)
-		m_pGroundMove = std::make_unique<CGroundElebot>(ps, axis, targetPosition);
+		m_pGroundMove = std::make_unique<CGroundElebot>(ps, axis, targetPosition, targetNormals);
 
 	if ((f & airmove) != 0) {
-		m_pAirMove = std::make_unique<CAirElebot>(ps, axis, targetPosition);
+		m_pAirMove = std::make_unique<CAirElebot>(ps, axis, targetPosition, targetNormals);
 
-		//todo: remove when world target is implemented!
-		m_pAirMove->SetGroundTarget();
+
+		//if we start from the target coordinate, detach from the wall and ele again to move sideways
+		//but don't automatically detach if we're only targeting airmove
+		if (!CG_IsOnGround(ps) && ps->origin[axis] == targetPosition && ps->velocity[Z] == 0.f && f != airmove)
+			m_pAirMove->SetToDetach();
+		else 
+			m_pAirMove->SetGroundTarget();
 	}
 
-	m_oInit = {
-		.m_iAxis = axis,
-		.m_fTargetPosition = targetPosition,
-		.m_iElebotFlags = f
-	};
+	if (m_oInit.m_bAutoStandUp && f != airmove)
+		m_pStandup = std::make_unique<CElebotStandup>(*GetMove(ps));
+
 
 }
 CElebot::~CElebot() = default;
@@ -280,6 +307,9 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 
 	base->OnFrameStart(ps);
 	if (!base->Update(ps, cmd, oldcmd)) {
+
+		if (base->HasFinished(ps) && m_pStandup && m_pStandup->Update(ps, cmd, oldcmd))
+			return true;
 
 		//in case there is a pending finisher playback
  		base->PushPlayback();
@@ -327,14 +357,24 @@ void CStaticElebot::EB_MoveToCursor()
 	const auto hitpos = (start + (end - start) * trace.fraction) + (fvec3(trace.normal) * (HITBOX_SIZE - TRACE_SIZE - TRACE_CORRECTION));
 	
 	const axis_t axis = std::fabs(trace.normal[X]) > std::fabs(trace.normal[Y]) ? X : Y;
-	Instance = std::make_unique<CElebot>(&cgs->predictedPlayerState, axis, hitpos[axis]);
+
+	CElebot::init_data data{
+		.m_iAxis = axis,
+		.m_fTargetPosition = hitpos[axis],
+		.m_iElebotFlags = all_flags,
+		.m_vecTargetNormals = trace.normal,
+		.m_bAutoStandUp = NVar_FindMalleableVar<bool>("Auto standup")->Get()
+	};
+
+	Instance = std::make_unique<CElebot>(&cgs->predictedPlayerState, data);
+
 }
 void CStaticElebot::EB_StartAutomatically(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd)
 {
 
 	if (auto ptr = EB_VelocityGotClippedInTheAir(ps, cmd, oldcmd)) {
 		//only airmove movements allowed!
-		Instance = std::make_unique<CElebot>(ps, ptr->axis, ptr->hitpos, airmove);
+		Instance = std::make_unique<CElebot>(ps, CElebot::init_data{ ptr->axis, ptr->hitpos, airmove, ptr->trace.normal });
 	}
 	
 

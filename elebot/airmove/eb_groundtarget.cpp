@@ -33,6 +33,9 @@ bool CElebotGroundTarget::Update([[maybe_unused]] const playerState_s* ps, [[may
 {
 	auto& base = m_oRefBase;
 
+	if (m_oRefBase.HasFinished(ps))
+		return false;
+
 	//if stuck against a wall while falling
 	const auto beingClipped = base.IsVelocityBeingClipped(ps, cmd, oldcmd);
 	if (m_pBlockerAvoidState || ps->velocity[Z] < 0 && beingClipped) {

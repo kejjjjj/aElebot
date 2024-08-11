@@ -1,6 +1,7 @@
 #include "eb_airmove.hpp"
 #include "eb_groundtarget.hpp"
 #include "eb_worldtarget.hpp"
+#include "eb_detach.hpp"
 #include "../eb_main.hpp"
 
 #include "bg/bg_pmove.hpp"
@@ -18,24 +19,29 @@
 CAirElebotVariation::CAirElebotVariation(CElebotBase& base) : m_oRefBase(base){}
 CAirElebotVariation::~CAirElebotVariation() = default;
 
-CAirElebot::CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition)
-	: CElebotBase(ps, axis, targetPosition) {}
+CAirElebot::CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals)
+	: CElebotBase(ps, axis, targetPosition, targetNormals) {}
 CAirElebot::~CAirElebot() = default;
 
 bool CAirElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)
 {
 	assert(m_pElebotVariation != nullptr);
 
+	
 
 	if (!m_pElebotVariation->Update(ps, cmd, oldcmd)) {
 		return false;
 	}
 
-	return !HasFinished(ps);
+	return true;
 }
 void CAirElebot::SetGroundTarget()
 { 
 	m_pElebotVariation = std::make_unique<CElebotGroundTarget>(*this); 
+}
+void CAirElebot::SetToDetach()
+{
+	m_pElebotVariation = std::make_unique<CDetachElebot>(*this);
 }
 constexpr void CAirElebot::SetWorldTarget(const cbrush_t* brush, const sc_winding_t& winding)
 { 

@@ -13,7 +13,8 @@ enum eElebotVariation
 	world,
 	ground,
 	qlearn,
-	block
+	block,
+	detach
 };
 
 class CAirElebotVariation
@@ -23,7 +24,7 @@ public:
 	virtual ~CAirElebotVariation();
 	
 	[[nodiscard]] virtual ElebotUpdate_f Update = 0;
-	virtual constexpr eElebotVariation type() const noexcept = 0;
+	[[nodiscard]] virtual constexpr eElebotVariation type() const noexcept = 0;
 
 protected:
 	CElebotBase& m_oRefBase;
@@ -32,10 +33,12 @@ protected:
 class CAirElebot : public CElebotBase
 {
 public:
-	CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition);
+	CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals);
 	~CAirElebot();
 
 	void SetGroundTarget();
+	void SetToDetach();
+
 	constexpr void SetWorldTarget(const cbrush_t* brush, const sc_winding_t& winding);
 
 	[[nodiscard]] ElebotUpdate_f Update override;
