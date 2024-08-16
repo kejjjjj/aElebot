@@ -92,7 +92,7 @@ bool CElebotStandup::Update(const playerState_s* ps, usercmd_s* cmd, const userc
 	cmd->forwardmove = 0;
 	cmd->rightmove = 0;
 
-	if (!m_bCeilingExists && CG_HasFlag(ps, PMF_DUCKED | PMF_PRONE))
+	if (CG_IsOnGround(ps) && !m_bCeilingExists && CG_HasFlag(ps, PMF_DUCKED | PMF_PRONE))
 		return GroundMove(ps, cmd, oldcmd);
 
 	return AirMove(ps, cmd, oldcmd);
@@ -142,11 +142,13 @@ playerState_s next_ps;
 bool CElebotStandup::CeilingExists(const playerState_s* ps, usercmd_s* cmd, const usercmd_s* oldcmd)
 {
 	playerState_s ps_local = *ps;
-	usercmd_s ccmd = *cmd;
 
 	//standup
 	auto pm = PM_Create(&ps_local, cmd, oldcmd);
-	pm.cmd.buttons = cmdEnums::jump;
+	if (CG_IsOnGround(pm.ps))
+		pm.cmd.buttons = cmdEnums::jump;
+	else
+		pm.cmd.buttons = cmdEnums::crouch;
 
 	CPmoveSimulation sim(&pm);
 	sim.FPS = ELEBOT_FPS;

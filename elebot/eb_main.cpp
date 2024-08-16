@@ -29,9 +29,10 @@
 #include <array>
 #include <ranges>
 
+#include "_Modules/aMovementRecorder/movement_recorder/mr_playback.hpp"
+
 #if(DEBUG_SUPPORT)
 #include "_Modules/aMovementRecorder/movement_recorder/mr_main.hpp"
-#include "_Modules/aMovementRecorder/movement_recorder/mr_playback.hpp"
 #else
 #include "shared/sv_shared.hpp"
 #endif
@@ -90,16 +91,20 @@ void CElebotBase::PushPlayback()
 	CStaticMovementRecorder::PushPlayback(m_oVecCmds, 
 		{ 
 			.jump_slowdownEnable = CPlayback::slowdown_t::both, 
-			.ignorePitch = true 
+			.ignorePitch = true,
+			.ignoreWASD = true
 		}
 	);
 #else
 
-	CMain::Shared::GetFunctionOrExit("AddPlayback")->As<void, std::vector<playback_cmd>&&, const PlaybackInitializer&>()->Call(
+	CMain::Shared::GetFunctionOrExit("AddPlayback")->As<void, std::vector<playback_cmd>&&, const CPlaybackSettings&>()->Call(
 		std::move(m_oVecCmds),
 		{
-			.jump_slowdownEnable = 2, //2 is for both
-			.ignorePitch = true
+			.m_eJumpSlowdownEnable = slowdown_t::both,
+			.m_bIgnorePitch = true,
+			.m_bIgnoreWASD = true,
+			.m_bSetComMaxfps = true,
+			.m_bRenderExpectationVsReality = false
 		}
 
 	);
@@ -124,11 +129,14 @@ void CElebotBase::PushPlayback(const std::vector<playback_cmd>& cmds) const
 		}
 	);
 #else
-	CMain::Shared::GetFunctionOrExit("AddPlaybackC")->As<void, const std::vector<playback_cmd>&, const PlaybackInitializer&>()->Call(
+	CMain::Shared::GetFunctionOrExit("AddPlaybackC")->As<void, const std::vector<playback_cmd>&, const CPlaybackSettings&>()->Call(
 		cmds,
 		{
-			.jump_slowdownEnable = 2, //2 is for both
-			.ignorePitch = true
+			.m_eJumpSlowdownEnable = slowdown_t::both,
+			.m_bIgnorePitch = true,
+			.m_bIgnoreWASD = true,
+			.m_bSetComMaxfps = true,
+			.m_bRenderExpectationVsReality = false
 		}
 
 	);

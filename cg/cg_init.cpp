@@ -30,8 +30,12 @@ return 0;
 
 static void NVar_Setup([[maybe_unused]]NVarTable* table)
 {
-    table->AddImNvar<bool, ImCheckbox>("Elevate everything", false, NVar_ArithmeticToString<bool>);
-    table->AddImNvar<bool, ImCheckbox>("Auto standup", true, NVar_ArithmeticToString<bool>);
+    table->AddImNvar<bool, ImCheckbox>("Elevate everything", false, NVar_ArithmeticToString<bool>)
+        ->AddWidget<std::string, ImHintString>("hintstring", eWidgetFlags::no_flags, "jump against any wall that can be elevated and watch magic happen");
+
+    table->AddImNvar<bool, ImCheckbox>("Auto standup", true, NVar_ArithmeticToString<bool>)
+        ->AddWidget<std::string, ImHintString>("hintstring", eWidgetFlags::no_flags, "jump automatically after the elevator is finished");
+
 
 }
 
@@ -115,6 +119,9 @@ void CG_Init()
     CMain::Shared::GetFunctionOrExit("Queue_CL_FinishMove")->As<void, finishmove_t>()->Call(CL_FinishMove);
     //CMain::Shared::GetFunctionOrExit("Queue_RB_EndScene")->As<void, rb_endscene_t>()->Call(RB_DrawDebug);
     CMain::Shared::GetFunctionOrExit("Queue_CG_Cleanup")->As<void, cg_cleanup_t>()->Call(CG_Cleanup);
+
+#pragma warning( suppress : 6011) //false positive
+    CMain::Shared::AddFunction(std::make_unique<CSharedFunction<bool>>("ElebotActive", []()-> bool { return CStaticElebot::Instance != nullptr; }));
 
     Cmd_AddCommand("eb_run", CStaticElebot::EB_MoveToCursor);
 
