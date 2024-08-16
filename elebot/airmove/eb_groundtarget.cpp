@@ -255,7 +255,8 @@ bool CElebotGroundTarget::ResetVelocity(const playerState_s* ps, const usercmd_s
 		.trace = &clipTrace
 	};
 
-
+	constexpr auto MAX_ITERATIONS = 1000u;
+	auto iteration = 0u;
 	while (!bGrounded && bIsCorrectVelocityDirection)  {
 
 		sim.Simulate(&pm.cmd, &pm.oldcmd);
@@ -264,6 +265,9 @@ bool CElebotGroundTarget::ResetVelocity(const playerState_s* ps, const usercmd_s
 		bVelocityClipped = base.IsVelocityBeingClippedAdvanced(clipping);
 		bGrounded = CG_IsOnGround(pm.ps);
 		bIsCorrectVelocityDirection = base.IsCorrectVelocityDirection(pm.ps->velocity[axis]);
+
+		if (++iteration > MAX_ITERATIONS)
+			return false;
 	}
 
 	if (bGrounded)
