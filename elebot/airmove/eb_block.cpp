@@ -228,7 +228,7 @@ bool CBlockElebot::FindInputs(CElebotInput& firstInput)
 		ClearInputs(sim, firstInput);
 	}
 
-	Com_Printf("^1failure\n");
+	m_oRefBase.Elebot_Printf("^1failure\n");
 	return false;
 }
 bool CBlockElebot::FindInputForStep(CPmoveSimulation& sim, CElebotInput& parent, CElebotInput& input, bool isFirstInput)
@@ -311,13 +311,13 @@ bool CBlockElebot::OnCoordinateFound(CPmoveSimulation& sim, CElebotInput& input)
 
 	//test if we elevate when standing up
 	if (ValidateResult(sim)) {
-		Com_Printf("^2elevator detected\n");
+		m_oRefBase.Elebot_Printf("^2elevator detected\n");
 		//gg we even elevated
 		return true;
 	}
 
 	//too much fall speed!
-	Com_Printf("stood up ^1%.6fu^7 too late\n", (m_fMinHeight - sim.pm->ps->origin[Z]));
+	m_oRefBase.Elebot_Printf("stood up ^1", (m_fMinHeight - sim.pm->ps->origin[Z]), "u^7 too late!\n");
 	return false;
 
 }

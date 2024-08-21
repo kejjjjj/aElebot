@@ -5,7 +5,7 @@
 class CGroundElebot : public CElebotBase
 {
 public:
-	CGroundElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals);
+	CGroundElebot(const playerState_s* ps, const init_data& init);
 	~CGroundElebot();
 
 	[[nodiscard]] ElebotUpdate_f Update override;

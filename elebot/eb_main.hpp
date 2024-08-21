@@ -2,9 +2,12 @@
 
 #include <memory>
 #include <vector>
+#include <format>
+#include <sstream>
 
 #include "cg/cg_angles.hpp"
 #include "utils/typedefs.hpp"
+#include "com/com_channel.hpp"
 
 constexpr auto ELEBOT_FPS = 333u;
 
@@ -25,7 +28,14 @@ enum elebot_flags
 	all_flags = 0xFFFFFFFF
 };
 
-
+struct init_data {
+	axis_t m_iAxis{};
+	float m_fTargetPosition{};
+	elebot_flags m_iElebotFlags = all_flags;
+	fvec3 m_vecTargetNormals;
+	bool m_bAutoStandUp = true;
+	bool m_bPrintf = false;
+};
 
 class CElebotBase
 {
@@ -41,7 +51,7 @@ class CElebotBase
 	friend void CL_FinishMove(usercmd_s* cmd);
 
 public:
-	CElebotBase(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals);
+	CElebotBase(const playerState_s* ps, const init_data& init);
 	virtual ~CElebotBase();
 
 	[[nodiscard]] virtual ElebotUpdate_f Update = 0;
@@ -73,6 +83,18 @@ protected:
 	[[nodiscard]] virtual constexpr float GetTargetYawForSidewaysMovement() const noexcept;
 
 	virtual void ApplyMovementDirectionCorrections(const playerState_s* ps) noexcept;
+
+	template<typename ... Args>
+	void Elebot_Printf(const Args... args) {
+
+		std::stringstream ss;
+		((ss << std::format("{}", args)), ...);
+
+		const auto str = ss.str();
+
+		if (m_bPrintf)
+			Com_Printf(str.c_str());
+	}
 
 	struct velocityClipping_t
 	{
@@ -108,7 +130,7 @@ protected:
 	std::int8_t m_cForwardDirection = 127;
 
 	bool m_bTryAgain = false;
-
+	bool m_bPrintf = false;
 private:
 
 
@@ -124,19 +146,14 @@ class CElebot
 
 public:
 
-	struct init_data {
-		axis_t m_iAxis{};
-		float m_fTargetPosition{};
-		elebot_flags m_iElebotFlags = all_flags;
-		fvec3 m_vecTargetNormals;
-		bool m_bAutoStandUp = true;
-	}m_oInit;
 
 	CElebot(const playerState_s* ps, const init_data& init);
 	~CElebot();
 	[[nodiscard]] ElebotUpdate_f Update;
 	[[nodiscard]] bool TryAgain() const noexcept;
 private:
+
+	init_data m_oInit{};
 
 	CElebotBase* GetMove(const playerState_s* ps);
 
@@ -156,6 +173,8 @@ public:
 	static std::unique_ptr<CElebot> Instance;
 
 	static void EB_MoveToCursor();
+	static void EB_CenterYaw();
+
 	static void EB_StartAutomatically(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);
 
 	[[nodiscard]] static std::unique_ptr<traceResults_t> EB_VelocityGotClipped(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd);

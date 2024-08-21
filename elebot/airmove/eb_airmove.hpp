@@ -33,7 +33,7 @@ protected:
 class CAirElebot : public CElebotBase
 {
 public:
-	CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals);
+	CAirElebot(const playerState_s* ps, const init_data& init);
 	~CAirElebot();
 
 	void SetGroundTarget();

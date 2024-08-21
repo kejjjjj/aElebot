@@ -18,8 +18,8 @@
 using FailCondition = CPmoveSimulation::StopPositionInput_t::FailCondition_e;
 
 
-CGroundElebot::CGroundElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals)
-	: CElebotBase(ps, axis, targetPosition, targetNormals)
+CGroundElebot::CGroundElebot(const playerState_s* ps, const init_data& init)
+	: CElebotBase(ps, init)
 {
 
 	const auto d = static_cast<float>(CG_RoundAngleToCardinalDirection(ps->viewangles[YAW]));

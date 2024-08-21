@@ -19,8 +19,8 @@
 CAirElebotVariation::CAirElebotVariation(CElebotBase& base) : m_oRefBase(base){}
 CAirElebotVariation::~CAirElebotVariation() = default;
 
-CAirElebot::CAirElebot(const playerState_s* ps, axis_t axis, float targetPosition, const fvec3& targetNormals)
-	: CElebotBase(ps, axis, targetPosition, targetNormals) {}
+CAirElebot::CAirElebot(const playerState_s* ps, const init_data& init)
+	: CElebotBase(ps, init) {}
 CAirElebot::~CAirElebot() = default;
 
 bool CAirElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)

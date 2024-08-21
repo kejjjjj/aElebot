@@ -2,6 +2,8 @@
 
 #include "r/gui/r_gui.hpp"
 
+struct ImKeybind;
+
 class CElebotWindow : public CGuiElement
 {
 public:
@@ -20,6 +22,7 @@ public:
 	void Render() override;
 
 private:
+	std::vector<std::unique_ptr<ImKeybind>> m_oKeybinds;
 
 
 	size_t m_uSelectedPlayback = {};

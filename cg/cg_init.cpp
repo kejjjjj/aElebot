@@ -36,6 +36,12 @@ static void NVar_Setup([[maybe_unused]]NVarTable* table)
     table->AddImNvar<bool, ImCheckbox>("Auto standup", true, NVar_ArithmeticToString<bool>)
         ->AddWidget<std::string, ImHintString>("hintstring", eWidgetFlags::no_flags, "jump automatically after the elevator is finished");
 
+    table->AddImNvar<bool, ImCheckbox>("Printf", true, NVar_ArithmeticToString<bool>)
+        ->AddWidget<std::string, ImHintString>("hintstring", eWidgetFlags::no_flags, "print elebot messages (recommended)");
+
+    table->AddImNvar<bool, ImCheckbox>("Coordinates", true, NVar_ArithmeticToString<bool>)
+        ->AddWidget<std::string, ImHintString>("hintstring", eWidgetFlags::no_flags, "draw player's coordinates");
+
 
 }
 
@@ -72,6 +78,7 @@ void CG_Init()
     table->WriteNVarsToFile();
 
     Cmd_AddCommand("eb_run", CStaticElebot::EB_MoveToCursor);
+    Cmd_AddCommand("eb_centerYaw", CStaticElebot::EB_CenterYaw);
 
     COD4X::initialize();
     CG_MemoryTweaks();
@@ -124,6 +131,7 @@ void CG_Init()
     CMain::Shared::AddFunction(std::make_unique<CSharedFunction<bool>>("ElebotActive", []()-> bool { return CStaticElebot::Instance != nullptr; }));
 
     Cmd_AddCommand("eb_run", CStaticElebot::EB_MoveToCursor);
+    Cmd_AddCommand("eb_centerYaw", CStaticElebot::EB_CenterYaw);
 
     CG_CreatePermaHooks();
 

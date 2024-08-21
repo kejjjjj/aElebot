@@ -1,6 +1,7 @@
 #include "cg/cg_local.hpp"
 #include "cg/cg_offsets.hpp"
 #include "cl/cl_utils.hpp"
+#include "net/nvar_table.hpp"
 #include "r/gui/r_main_gui.hpp"
 #include "r/r_drawtools.hpp"
 #include "r/r_utils.hpp"
@@ -19,18 +20,19 @@ void CG_DrawActive()
 		return;
 #endif
 
-	const std::string text = std::format(
-		"x:      {:.6f}\n"
-		"y:      {:.6f}\n"
-		"z:      {:.6f}\n"
-		"yaw: {:.6f}\n",
-		clients->cgameOrigin[0],
-		clients->cgameOrigin[1],
-		clients->cgameOrigin[2],
-		clients->cgameViewangles[YAW]);
+	if (NVar_FindMalleableVar<bool>("Coordinates")->Get()) {
+		const std::string text = std::format(
+			"x:      {:.6f}\n"
+			"y:      {:.6f}\n"
+			"z:      {:.6f}\n"
+			"yaw: {:.6f}\n",
+			clients->cgameOrigin[0],
+			clients->cgameOrigin[1],
+			clients->cgameOrigin[2],
+			clients->cgameViewangles[YAW]);
 
-	R_AddCmdDrawTextWithEffects(text, "fonts/normalFont", fvec2{ 310, 400 }, {0.4f, 0.5f}, 0.f, 3, vec4_t{1,1,1,1}, vec4_t{1,0,0,0});
-
+		R_AddCmdDrawTextWithEffects(text, "fonts/normalFont", fvec2{ 310, 420 }, { 0.4f, 0.5f }, 0.f, 3, vec4_t{ 1,1,1,1 }, vec4_t{ 1,0,0,0 });
+	}
 
 #if(DEBUG_SUPPORT)
 	return hooktable::find<void>(HOOK_PREFIX(__func__))->call();

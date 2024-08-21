@@ -38,7 +38,7 @@ bool CElebotGroundTarget::Update([[maybe_unused]] const playerState_s* ps, [[may
 
 	//if stuck against a wall while falling
 	const auto beingClipped = base.IsVelocityBeingClipped(ps, cmd, oldcmd);
-	if (m_pBlockerAvoidState || ps->velocity[Z] < 0 && beingClipped) {
+	if (m_pBlockerAvoidState || beingClipped) {
 		return UpdateBlocker(ps, cmd, oldcmd, reinterpret_cast<BlockFunc>(&CElebotGroundTarget::TryGoingUnderTheBlocker));
 	}
 
@@ -66,6 +66,11 @@ bool CElebotGroundTarget::UpdateBlocker(const playerState_s* ps, usercmd_s* cmd,
 bool CElebotGroundTarget::GetBlocker(const playerState_s* ps, const usercmd_s* cmd, const usercmd_s* oldcmd, 
 	const BlockFunc& func)
 {
+	//without this check it triggers when you hit block bounces or hug a wall after a bounce...
+	//...that is annoying...
+	if (ps->velocity[Z] > 0 || ps->velocity[m_oRefBase.m_iAxis] != 0.f)
+		return false;
+
 	if (m_pBlockerAvoidState) {
 		return true;
 	}
@@ -255,7 +260,7 @@ bool CElebotGroundTarget::ResetVelocity(const playerState_s* ps, const usercmd_s
 		.trace = &clipTrace
 	};
 
-	constexpr auto MAX_ITERATIONS = 1000u;
+	constexpr auto MAX_ITERATIONS = 10000u;
 	auto iteration = 0u;
 	while (!bGrounded && bIsCorrectVelocityDirection)  {
 
