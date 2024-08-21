@@ -26,14 +26,7 @@ CAirElebot::~CAirElebot() = default;
 bool CAirElebot::Update(const playerState_s* ps, usercmd_s* cmd, [[maybe_unused]] usercmd_s* oldcmd)
 {
 	assert(m_pElebotVariation != nullptr);
-
-	
-
-	if (!m_pElebotVariation->Update(ps, cmd, oldcmd)) {
-		return false;
-	}
-
-	return true;
+	return m_pElebotVariation->Update(ps, cmd, oldcmd);
 }
 void CAirElebot::SetGroundTarget()
 { 

@@ -64,8 +64,6 @@ bool CElebotStandup::StandupWillElevate(pmove_t& pmOrg)
 		memcpy(&pm.oldcmd, &pm.cmd, sizeof(usercmd_s));
 
 		m_oRefBase.EmplacePlaybackCommand(pm.ps, &pm.cmd);
-
-
 	}
 
 	if (oldOriginZ < pm.ps->origin[Z]) {
@@ -118,24 +116,6 @@ bool CElebotStandup::AirMove([[maybe_unused]] const playerState_s* ps, [[maybe_u
 	if (!m_bCeilingExists && !CeilingExists(ps, cmd, oldcmd))
 		return false;
 
-	//if (CG_IsOnGround(ps)) {
-	//	cmd->buttons = cmdEnums::jump;
-	//	return true;
-	//}else{ 
-	//	cmd->buttons = (cmdEnums::crouch);
-	//}
-
-	//playerState_s ps_local = *ps;
-	//auto pm = PM_Create(&ps_local, cmd, oldcmd);
-	//CPmoveSimulation sim(&pm);
-	//sim.FPS = ELEBOT_FPS;
-
-	//if (StandupWillElevate(sim)) {
-	//	cmd->buttons = cmdEnums::jump;
-	//	return false;
-	//}
-
-	//wait until hitting the ceiling...
 	return false;
 }
 playerState_s next_ps;
@@ -145,25 +125,27 @@ bool CElebotStandup::CeilingExists(const playerState_s* ps, usercmd_s* cmd, cons
 
 	//standup
 	auto pm = PM_Create(&ps_local, cmd, oldcmd);
-	if (CG_IsOnGround(pm.ps))
-		pm.cmd.buttons = cmdEnums::jump;
-	else
-		pm.cmd.buttons = cmdEnums::crouch;
+	pm.cmd.buttons = CG_IsOnGround(pm.ps) ? cmdEnums::jump : cmdEnums::crouch;
 
 	CPmoveSimulation sim(&pm);
 	sim.FPS = ELEBOT_FPS;
 
+	constexpr auto MAX_ITERATIONS = 10000u;
+	auto iteration = 0u;
 	do {
 		m_oRefBase.EmplacePlaybackCommand(pm.ps, &pm.cmd);
 
 		sim.Simulate(&pm.cmd, &pm.oldcmd);
 		memcpy(&pm.oldcmd, &pm.cmd, sizeof(usercmd_s));
 
-		if(CG_HasFlag(pm.ps, PMF_JUMPING))
-			pm.cmd.buttons = cmdEnums::crouch;
+		pm.cmd.buttons = CG_IsOnGround(pm.ps) ? cmdEnums::jump : cmdEnums::crouch;
+
 
 		next_ps = ps_local;
 		CPmoveSimulation::PredictNextPosition(&next_ps, &pm.cmd, &pm.oldcmd, ELEBOT_FPS);
+
+		if (++iteration > MAX_ITERATIONS) //avoid game freezing
+			return true;
 
 	} while (next_ps.velocity[Z] > 0.f);
 
@@ -171,6 +153,8 @@ bool CElebotStandup::CeilingExists(const playerState_s* ps, usercmd_s* cmd, cons
 
 	if (!m_bCeilingExists)
 		m_oRefBase.m_oVecCmds.clear();
+	else
+		cmd->buttons = cmdEnums::crouch_hold;
 
 	return m_bCeilingExists;
 }

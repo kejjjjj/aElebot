@@ -22,9 +22,6 @@ bool CDetachElebot::Update([[maybe_unused]] const playerState_s* ps, [[maybe_unu
 	if (CG_IsOnGround(ps) || ps->origin[base.m_iAxis] != base.m_fTargetPosition)
 		return false;
 
-	if (base.IsMovingBackwards())
-		base.m_fTargetYaw = AngleNormalize180(base.m_fTargetYaw + 180);
-
 	if (CanMoveAwayFromTheWall(ps, cmd, oldcmd)) {		
 		MoveAwayFromTheWall(ps, cmd);
 		return true;
