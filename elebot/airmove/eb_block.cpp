@@ -187,7 +187,7 @@ bool CBlockElebot::FindInputs(CElebotInput& firstInput)
 	CPmoveSimulation sim(pm, GenericCrouchedForwardmoveController(&m_pPMove->cmd));
 
 	//in case it gets stuck in an infinite loop
-	constexpr auto MAX_ITERATIONS = 50;
+	constexpr auto MAX_ITERATIONS = 50u;
 	auto iteration = 0u;
 
 	//keep going as long as we still have a meaningful half

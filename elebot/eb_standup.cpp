@@ -87,6 +87,10 @@ bool CElebotStandup::Update(const playerState_s* ps, usercmd_s* cmd, const userc
 	if (WASD_PRESSED())
 		return false;
 
+	//wait until not moving horizontally
+	if (((fvec2&)(ps->velocity)).MagSq() != 0.f)
+		return true;
+
 	cmd->forwardmove = 0;
 	cmd->rightmove = 0;
 
@@ -144,8 +148,10 @@ bool CElebotStandup::CeilingExists(const playerState_s* ps, usercmd_s* cmd, cons
 		next_ps = ps_local;
 		CPmoveSimulation::PredictNextPosition(&next_ps, &pm.cmd, &pm.oldcmd, ELEBOT_FPS);
 
-		if (++iteration > MAX_ITERATIONS) //avoid game freezing
-			return true;
+		if (++iteration > MAX_ITERATIONS) { //avoid game freezing
+			m_oRefBase.GiveUp(); //don't kill frames
+			return false;
+		}
 
 	} while (next_ps.velocity[Z] > 0.f);
 

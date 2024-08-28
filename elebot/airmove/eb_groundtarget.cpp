@@ -128,8 +128,10 @@ std::unique_ptr<pmove_t> CElebotGroundTarget::TryGoingUnderTheBlocker(const play
 	auto iteration = 0u;
 	do {
 
-		if (!sim.Simulate() || ++iteration > MAX_ITERATIONS)
+		if (!sim.Simulate() || ++iteration > MAX_ITERATIONS) {
+			base.GiveUp(); //don't kill frames
 			break;
+		}
 
 		memcpy(&pm->oldcmd, &pm->cmd, sizeof(usercmd_s));
 
@@ -271,8 +273,10 @@ bool CElebotGroundTarget::ResetVelocity(const playerState_s* ps, const usercmd_s
 		bGrounded = CG_IsOnGround(pm.ps);
 		bIsCorrectVelocityDirection = base.IsCorrectVelocityDirection(pm.ps->velocity[axis]);
 
-		if (++iteration > MAX_ITERATIONS)
+		if (++iteration > MAX_ITERATIONS) {
+			base.GiveUp(); //don't kill frames
 			return false;
+		}
 	}
 
 	if (bGrounded)

@@ -61,6 +61,9 @@ public:
 
 	void OnFrameStart(const playerState_s* ps) noexcept;
 
+	inline void GiveUp() const noexcept { m_bGaveUp = true; }
+	[[nodiscard]] virtual bool HasGivenUp() const noexcept { return m_bGaveUp; }
+
 	[[nodiscard]] virtual bool HasFinished(const playerState_s* ps) const noexcept;
 
 	//something silly happened and it's probably better if you reinitialize the elebot with the same data
@@ -131,6 +134,7 @@ protected:
 
 	bool m_bTryAgain = false;
 	bool m_bPrintf = false;
+	mutable bool m_bGaveUp = false;
 private:
 
 

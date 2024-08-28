@@ -100,7 +100,12 @@ void CElebotBase::PushPlayback()
 	);
 #else
 
-	CMain::Shared::GetFunctionOrExit("AddPlayback")->As<void, std::vector<playback_cmd>&&, const CPlaybackSettings&>()->Call(
+	const auto func = CMain::Shared::GetFunction("AddPlayback");
+
+	if (!func)
+		return;
+
+	func->As<void, std::vector<playback_cmd>&&, const CPlaybackSettings&>()->Call(
 		std::move(m_oVecCmds),
 		{
 			.m_eJumpSlowdownEnable = slowdown_t::both,
@@ -135,7 +140,13 @@ void CElebotBase::PushPlayback(const std::vector<playback_cmd>& cmds) const
 		}
 	);
 #else
-	CMain::Shared::GetFunctionOrExit("AddPlaybackC")->As<void, const std::vector<playback_cmd>&, const CPlaybackSettings&>()->Call(
+
+	const auto func = CMain::Shared::GetFunction("AddPlaybackC");
+
+	if (!func)
+		return;
+
+	func->As<void, const std::vector<playback_cmd>&, const CPlaybackSettings&>()->Call(
 		cmds,
 		{
 			.m_eJumpSlowdownEnable = slowdown_t::both,
@@ -322,6 +333,11 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 	//sorry you can't move anymore LOL
 	cmd->forwardmove = 0;
 	cmd->rightmove = 0;
+
+	if (base->HasGivenUp()) {
+		base->Elebot_Printf("^1gave up!\n");
+		return false;
+	}
 	
 	base->OnFrameStart(ps);
 	if (!base->Update(ps, cmd, oldcmd)) {
