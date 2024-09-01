@@ -5,6 +5,8 @@
 #include "cg/cg_init.hpp"
 #include "cg/cg_cleanup.hpp"
 
+#include "cl/cl_utils.hpp"
+
 #include "cmd/cmd.hpp"
 #include "cod4x/cod4x.hpp"
 #include "net/im_defaults.hpp"
@@ -123,7 +125,7 @@ void CG_Init()
 
     //add the functions that need to be managed by the main module
     CMain::Shared::GetFunctionOrExit("Queue_CG_DrawActive")->As<void, drawactive_t>()->Call(CG_DrawActive);
-    CMain::Shared::GetFunctionOrExit("Queue_CL_FinishMove")->As<void, finishmove_t>()->Call(CL_FinishMove);
+    CMain::Shared::GetFunctionOrExit("Queue_CL_CreateNewCommands")->As<void, createnewcommands_t>()->Call(CL_CreateNewCommands);
     //CMain::Shared::GetFunctionOrExit("Queue_RB_EndScene")->As<void, rb_endscene_t>()->Call(RB_DrawDebug);
     CMain::Shared::GetFunctionOrExit("Queue_CG_Cleanup")->As<void, cg_cleanup_t>()->Call(CG_Cleanup);
 

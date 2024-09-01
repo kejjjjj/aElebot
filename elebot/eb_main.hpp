@@ -49,6 +49,7 @@ class CElebotBase
 	friend class CElebotStandup;
 
 	friend void CL_FinishMove(usercmd_s* cmd);
+	friend void CL_CreateNewCommands([[maybe_unused]] int localClientNum);
 
 public:
 	CElebotBase(const playerState_s* ps, const init_data& init);
@@ -147,6 +148,7 @@ class CElebot
 {
 	NONCOPYABLE(CElebot);
 	friend void CL_FinishMove(usercmd_s* cmd);
+	friend void CL_CreateNewCommands([[maybe_unused]] int localClientNum);
 
 public:
 

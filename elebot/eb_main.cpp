@@ -325,6 +325,15 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 	assert(cmd != nullptr);
 	assert(oldcmd != nullptr);
 
+#if(!DEBUG_SUPPORT)
+
+	const auto PlaybackActive = CMain::Shared::GetFunctionSafe("PlaybackActive");
+
+	//a playback is currently active, so don't overwrite the cmds
+	if (PlaybackActive && PlaybackActive->As<bool>()->Call())
+		return true;
+#endif
+
 	CElebotBase* base = GetMove(ps);
 
 	if (!base || CG_HasFlag(ps, PMF_LADDER | PMF_MANTLE))

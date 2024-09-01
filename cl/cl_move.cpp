@@ -15,52 +15,51 @@
 #include "_Modules/aMovementRecorder/movement_recorder/mr_playback.hpp"
 #endif
 
-void CL_FinishMove(usercmd_s* cmd)
+void CL_CreateNewCommands([[maybe_unused]] int localClientNum)
 {
-#if(DEBUG_SUPPORT)
-	hooktable::find<void, usercmd_s*>(HOOK_PREFIX(__func__))->call(cmd);
-#endif
-
 	auto ps = &cgs->predictedPlayerState;
-	auto oldcmd = CL_GetUserCmd(clients->cmdNumber - 1);
-
+	auto cmd = &clients->cmds[clients->cmdNumber & 0x7F];
+	auto oldcmd = &clients->cmds[(clients->cmdNumber - 1) & 0x7F];
 	auto& elebot = CStaticElebot::Instance;
 
-	if (ps->pm_type == PM_NORMAL) {
+	if (ps->pm_type != PM_NORMAL)
+		return;
 
-		try {
-			if (NVar_FindMalleableVar<bool>("Elevate everything")->Get()) {
-				CStaticElebot::EB_StartAutomatically(ps, cmd, oldcmd);
-			}
+	try {
 
-			if (elebot && !elebot->Update(ps, cmd, oldcmd)) {
-
-				//yea try again
-				if (elebot->TryAgain()) {
-					ps->viewangles[YAW] = elebot->GetMove(ps)->m_fInitialYaw;
-					elebot = std::make_unique<CElebot>(ps, elebot->m_oInit);
-					
-					return;
-				}
-
-				if (const auto base = elebot->GetMove(ps)) {
-					if (base->HasFinished(ps)) {
-						CL_SetPlayerAngles(cmd, ps->delta_angles, { ps->viewangles[PITCH], base->m_fInitialYaw, 0.f });
-					}
-				}
-				elebot.reset();
-			}
+		if (NVar_FindMalleableVar<bool>("Elevate everything")->Get()) {
+			CStaticElebot::EB_StartAutomatically(ps, cmd, oldcmd);
 		}
-		catch (...) {
-			Com_Printf("^1internal error lol\n");
+
+		if (elebot && !elebot->Update(ps, cmd, oldcmd)) {
+
+			//yea try again
+			if (elebot->TryAgain()) {
+				ps->viewangles[YAW] = elebot->GetMove(ps)->m_fInitialYaw;
+				elebot = std::make_unique<CElebot>(ps, elebot->m_oInit);
+
+				return;
+			}
+
+			if (const auto base = elebot->GetMove(ps)) {
+				if (base->HasFinished(ps)) {
+					CL_SetPlayerAngles(cmd, ps->delta_angles, { ps->viewangles[PITCH], base->m_fInitialYaw, 0.f });
+				}
+			}
 			elebot.reset();
-
 		}
+	}
+	catch (...) {
+		Com_Printf("^1internal error lol\n");
+		elebot.reset();
 
-#if(DEBUG_SUPPORT)
-		CStaticMovementRecorder::Instance->Update(ps, cmd, oldcmd);
-#endif
 	}
 
+#if(DEBUG_SUPPORT)
+	CStaticMovementRecorder::Instance->Update(ps, cmd, oldcmd);
+#endif
+	
+
 	return;
+
 }
