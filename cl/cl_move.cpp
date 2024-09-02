@@ -17,6 +17,9 @@
 
 void CL_CreateNewCommands([[maybe_unused]] int localClientNum)
 {
+	if (CL_ConnectionState() != CA_ACTIVE)
+		return;
+
 	auto ps = &cgs->predictedPlayerState;
 	auto cmd = &clients->cmds[clients->cmdNumber & 0x7F];
 	auto oldcmd = &clients->cmds[(clients->cmdNumber - 1) & 0x7F];

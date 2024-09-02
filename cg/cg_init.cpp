@@ -92,16 +92,17 @@ void CG_Init()
 #include <cl/cl_move.hpp>
 void CG_Init()
 {
-    while (!dx || !dx->device) {
-        std::this_thread::sleep_for(100ms);
-    }
-
+    auto numAttempts = 0u;
     while (!CMain::Shared::AddFunction || !CMain::Shared::GetFunction) {
         std::this_thread::sleep_for(200ms);
+
+        if (++numAttempts > 25u) {
+            return CG_SafeErrorExit("It seems that the module " + std::string(NVAR_TABLE_NAME) + " couldn't get a connection to the main module");
+        }
     }
 
     Sys_SuspendAllThreads();
-    std::this_thread::sleep_for(300ms);
+    std::this_thread::sleep_for(20ms);
 
     COD4X::initialize();
 
