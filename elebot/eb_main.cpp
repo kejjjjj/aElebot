@@ -336,7 +336,7 @@ bool CElebot::Update(const playerState_s* ps, usercmd_s* cmd, usercmd_s* oldcmd)
 
 	CElebotBase* base = GetMove(ps);
 
-	if (!base || CG_HasFlag(ps, PMF_LADDER | PMF_MANTLE))
+	if (!base || CG_HasFlag(ps, PMF_LADDER | PMF_MANTLE) || ps->pm_type != PM_NORMAL)
 		return false;
 
 	//sorry you can't move anymore LOL
